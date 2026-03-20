@@ -1,0 +1,113 @@
+{
+  "exec_mode": "real",
+  "pallet": {
+    "length": 1100,
+    "width": 1100,
+    "base_height": 150,
+    "max_height": 1650,
+    "effective_height": 1500,
+    "max_weight": 1000.0
+  },
+  "supply": {
+    "mode": "free",
+    "buffer_size": 5,
+    "fifo_strict": false
+  },
+  "rules": {
+    "fragile_top": true,
+    "heavy_bottom": true,
+    "same_group": true,
+    "center_priority": false,
+    "outer_priority": false,
+    "stack_priority": false,
+    "no_overhang": true,
+    "temp_separate": false,
+    "overhang_limit": 0.0,
+    "support_ratio_min": 0.7,
+    "priority_order": ["heavy_bottom", "fragile_top", "same_group"]
+  },
+  "scoring": {
+    "w_support": 0.35,
+    "w_center": 0.25,
+    "w_height": 0.20,
+    "w_void": 0.10,
+    "w_group": 0.10
+  },
+  "cases": [
+    {
+      "sku_id": "SKU-A",
+      "name": "飲料水 2L×6本",
+      "length": 400,
+      "width": 300,
+      "height": 250,
+      "weight": 12.5,
+      "quantity": 4,
+      "fragile": false,
+      "stackable": true,
+      "max_stack": 4,
+      "group": "飲料",
+      "temperature": "normal",
+      "color": "#4A90D9"
+    },
+    {
+      "sku_id": "SKU-B",
+      "name": "お茶 500ml×24本",
+      "length": 350,
+      "width": 250,
+      "height": 200,
+      "weight": 12.0,
+      "quantity": 4,
+      "fragile": false,
+      "stackable": true,
+      "max_stack": 5,
+      "group": "飲料",
+      "temperature": "normal",
+      "color": "#2ECC71"
+    },
+    {
+      "sku_id": "SKU-C",
+      "name": "ガラス瓶調味料",
+      "length": 300,
+      "width": 200,
+      "height": 300,
+      "weight": 8.0,
+      "quantity": 3,
+      "fragile": true,
+      "stackable": false,
+      "max_stack": 1,
+      "group": "調味料",
+      "temperature": "normal",
+      "color": "#E67E22"
+    },
+    {
+      "sku_id": "SKU-D",
+      "name": "米 5kg",
+      "length": 450,
+      "width": 350,
+      "height": 150,
+      "weight": 5.2,
+      "quantity": 6,
+      "fragile": false,
+      "stackable": true,
+      "max_stack": 6,
+      "group": "乾物",
+      "temperature": "normal",
+      "color": "#9B59B6"
+    },
+    {
+      "sku_id": "SKU-E",
+      "name": "洗剤 大容量",
+      "length": 280,
+      "width": 220,
+      "height": 320,
+      "weight": 4.5,
+      "quantity": 5,
+      "fragile": false,
+      "stackable": true,
+      "max_stack": 3,
+      "group": "日用品",
+      "temperature": "normal",
+      "color": "#E74C3C"
+    }
+  ]
+}

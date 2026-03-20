@@ -1,0 +1,98 @@
+{
+  "exec_mode": "real",
+  "pallet": {
+    "length": 1100,
+    "width": 1100,
+    "base_height": 150,
+    "max_height": 1650,
+    "effective_height": 1500,
+    "max_weight": 1000.0
+  },
+  "supply": {
+    "mode": "fifo",
+    "buffer_size": 1,
+    "fifo_strict": true
+  },
+  "rules": {
+    "fragile_top": false,
+    "heavy_bottom": false,
+    "same_group": false,
+    "center_priority": false,
+    "outer_priority": true,
+    "stack_priority": false,
+    "no_overhang": true,
+    "temp_separate": false,
+    "overhang_limit": 0.0,
+    "support_ratio_min": 0.6,
+    "priority_order": ["outer_priority"]
+  },
+  "scoring": {
+    "w_support": 0.40,
+    "w_center": 0.10,
+    "w_height": 0.30,
+    "w_void": 0.15,
+    "w_group": 0.05
+  },
+  "cases": [
+    {
+      "sku_id": "FIFO-001",
+      "name": "段ボールA (入荷順1)",
+      "length": 500,
+      "width": 400,
+      "height": 350,
+      "weight": 18.0,
+      "quantity": 2,
+      "fragile": false,
+      "stackable": true,
+      "max_stack": 3,
+      "group": "A",
+      "temperature": "normal",
+      "color": "#3498DB"
+    },
+    {
+      "sku_id": "FIFO-002",
+      "name": "段ボールB (入荷順2)",
+      "length": 400,
+      "width": 300,
+      "height": 250,
+      "weight": 14.0,
+      "quantity": 3,
+      "fragile": false,
+      "stackable": true,
+      "max_stack": 4,
+      "group": "B",
+      "temperature": "normal",
+      "color": "#1ABC9C"
+    },
+    {
+      "sku_id": "FIFO-003",
+      "name": "段ボールC (入荷順3)",
+      "length": 350,
+      "width": 250,
+      "height": 200,
+      "weight": 10.0,
+      "quantity": 4,
+      "fragile": false,
+      "stackable": true,
+      "max_stack": 5,
+      "group": "C",
+      "temperature": "normal",
+      "color": "#F39C12"
+    },
+    {
+      "sku_id": "FIFO-004",
+      "name": "段ボールD (入荷順4)",
+      "length": 300,
+      "width": 200,
+      "height": 150,
+      "weight": 6.0,
+      "quantity": 5,
+      "fragile": false,
+      "stackable": true,
+      "max_stack": 6,
+      "group": "D",
+      "temperature": "normal",
+      "color": "#8E44AD"
+    }
+  ]
+}

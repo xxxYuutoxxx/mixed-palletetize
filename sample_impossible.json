@@ -1,0 +1,114 @@
+{
+  "exec_mode": "real",
+  "_comment": "このサンプルは意図的に一部ケースが配置不可能なケースを含む。SKU-OVERはパレットより大きいため未配置になる。",
+  "pallet": {
+    "length": 1100,
+    "width": 1100,
+    "base_height": 150,
+    "max_height": 1650,
+    "effective_height": 1500,
+    "max_weight": 200.0
+  },
+  "supply": {
+    "mode": "buffer",
+    "buffer_size": 3,
+    "fifo_strict": false
+  },
+  "rules": {
+    "fragile_top": true,
+    "heavy_bottom": true,
+    "same_group": false,
+    "center_priority": true,
+    "outer_priority": false,
+    "stack_priority": false,
+    "no_overhang": true,
+    "temp_separate": true,
+    "overhang_limit": 0.0,
+    "support_ratio_min": 0.75,
+    "priority_order": ["heavy_bottom", "fragile_top"]
+  },
+  "scoring": {
+    "w_support": 0.40,
+    "w_center": 0.30,
+    "w_height": 0.15,
+    "w_void": 0.10,
+    "w_group": 0.05
+  },
+  "cases": [
+    {
+      "sku_id": "SKU-NORM",
+      "name": "通常ケース",
+      "length": 400,
+      "width": 300,
+      "height": 200,
+      "weight": 10.0,
+      "quantity": 6,
+      "fragile": false,
+      "stackable": true,
+      "max_stack": 5,
+      "group": "A",
+      "temperature": "normal",
+      "color": "#4A90D9"
+    },
+    {
+      "sku_id": "SKU-HEAVY",
+      "name": "重量物 (20kg超)",
+      "length": 500,
+      "width": 400,
+      "height": 250,
+      "weight": 22.0,
+      "quantity": 3,
+      "fragile": false,
+      "stackable": true,
+      "max_stack": 2,
+      "group": "B",
+      "temperature": "normal",
+      "color": "#E74C3C"
+    },
+    {
+      "sku_id": "SKU-FRAGILE",
+      "name": "割れ物 (最上段のみ)",
+      "length": 300,
+      "width": 250,
+      "height": 280,
+      "weight": 5.0,
+      "quantity": 3,
+      "fragile": true,
+      "stackable": false,
+      "max_stack": 1,
+      "group": "C",
+      "temperature": "normal",
+      "color": "#E67E22"
+    },
+    {
+      "sku_id": "SKU-OVER",
+      "name": "巨大ケース (パレット超過・未配置期待)",
+      "length": 1200,
+      "width": 1200,
+      "height": 400,
+      "weight": 30.0,
+      "quantity": 1,
+      "fragile": false,
+      "stackable": false,
+      "max_stack": 1,
+      "group": "D",
+      "temperature": "normal",
+      "color": "#95A5A6"
+    },
+    {
+      "sku_id": "SKU-WEIGHT",
+      "name": "重量上限超過用ケース",
+      "length": 350,
+      "width": 280,
+      "height": 180,
+      "weight": 45.0,
+      "quantity": 5,
+      "fragile": false,
+      "stackable": true,
+      "max_stack": 3,
+      "group": "E",
+      "temperature": "normal",
+      "color": "#D35400"
+    }
+  ]
+}

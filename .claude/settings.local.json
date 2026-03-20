@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Read(//usr/**)",
+      "Read(//usr/local/**)",
+      "Read(//c/Users/onlyg/AppData/Local/Programs/**)",
+      "Read(//c/Users/onlyg/AppData/Local/Microsoft/WindowsApps//**)",
+      "Bash(cd:*)",
+      "Bash(cmd.exe /c \"python main.py sample_free.json --verbose\" 2>&1)",
+      "Bash(cmd.exe /c \"cd /d C:\\\\Users\\\\onlyg\\\\Documents\\\\claude\\\\palletize && python -c \\\\\"print\\('hello'\\)\\\\\"\" 2>&1)",
+      "Bash(cmd.exe /c \"where python 2>&1 && python --version 2>&1\" 2>&1 | cat)",
+      "Bash(\"/c/Users/onlyg/anaconda3/python.exe\" -c \"import matplotlib; print\\(matplotlib.__version__\\)\" 2>&1)",
+      "Bash(\"/c/Packing/venv/Scripts/python.exe\" --version 2>&1 && \"/c/Packing/venv/Scripts/python.exe\" -c \"import matplotlib; print\\('matplotlib:', matplotlib.__version__\\)\" 2>&1)",
+      "Bash(\"/c/untitled1/venv/Scripts/python.exe\" --version 2>&1 && \"/c/untitled1/venv/Scripts/python.exe\" -c \"import matplotlib; print\\('matplotlib:', matplotlib.__version__\\)\" 2>&1)",
+      "Bash(\"/c/untitled1/venv/Scripts/pip.exe\" install:*)",
+      "Bash(ls:*)"
+    ]
+  }
+}
