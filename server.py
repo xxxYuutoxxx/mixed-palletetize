@@ -1,0 +1,120 @@
+# -*- coding: utf-8 -*-
+"""
+server.py — FastAPI サーバー
+フロントエンド(index.html)とバックエンド(packer.py等)を繋ぐAPIサーバー
+
+起動方法:
+    pip install fastapi uvicorn
+    python server.py
+"""
+from __future__ import annotations
+import sys
+import uvicorn
+from pathlib import Path
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from typing import List, Any, Dict
+
+from models import CaseItem, PalletConfig, SupplyConfig, RuleConfig, ScoreConfig
+from packer import pack
+from io_handler import result_to_dict
+
+app = FastAPI(title="パレタイズ積付計算システム")
+BASE_DIR = Path(__file__).parent
+
+
+@app.get("/", response_class=HTMLResponse)
+def index():
+    return (BASE_DIR / "index.html").read_text(encoding="utf-8")
+
+
+class PackRequest(BaseModel):
+    cases: List[Dict[str, Any]]
+    pallet: Dict[str, Any] = {}
+    supply: Dict[str, Any] = {}
+    rules: Dict[str, Any] = {}
+    scoring: Dict[str, Any] = {}
+    exec_mode: str = "real"
+    beam_width: int = 1
+
+
+@app.post("/api/pack")
+def api_pack(req: PackRequest):
+    cases = [
+        CaseItem(
+            sku_id=c.get("sku_id", ""),
+            name=c.get("name", ""),
+            length=int(c.get("length", 0)),
+            width=int(c.get("width", 0)),
+            height=int(c.get("height", 0)),
+            weight=float(c.get("weight", 0)),
+            quantity=int(c.get("quantity", 1)),
+            fragile=bool(c.get("fragile", False)),
+            stackable=bool(c.get("stackable", True)),
+            max_stack=int(c.get("max_stack", 5)),
+            group=c.get("group", ""),
+            temperature=c.get("temperature", "normal"),
+            color=c.get("color", "#4A90D9"),
+            max_top_load=float(c.get("max_top_load", 0.0)),
+            no_flip=bool(c.get("no_flip", False)),
+            support_ratio_required=float(c.get("support_ratio_required", 0.0)),
+        )
+        for c in req.cases
+    ]
+
+    p = req.pallet
+    pallet = PalletConfig(
+        length=int(p.get("length", 1100)),
+        width=int(p.get("width", 1100)),
+        base_height=int(p.get("base_height", 150)),
+        max_height=int(p.get("max_height", 1650)),
+        effective_height=int(p.get("effective_height", 1500)),
+        max_weight=float(p.get("max_weight", 1000.0)),
+    )
+
+    s = req.supply
+    supply = SupplyConfig(
+        mode=s.get("mode", "free"),
+        buffer_size=int(s.get("buffer_size", 3)),
+        fifo_strict=bool(s.get("fifo_strict", True)),
+    )
+
+    r = req.rules
+    rules = RuleConfig(
+        fragile_top=bool(r.get("fragile_top", True)),
+        heavy_bottom=bool(r.get("heavy_bottom", True)),
+        same_group=bool(r.get("same_group", False)),
+        center_priority=bool(r.get("center_priority", False)),
+        outer_priority=bool(r.get("outer_priority", False)),
+        stack_priority=bool(r.get("stack_priority", False)),
+        no_overhang=bool(r.get("no_overhang", True)),
+        temp_separate=bool(r.get("temp_separate", False)),
+        overhang_limit=float(r.get("overhang_limit", 0.0)),
+        support_ratio_min=float(r.get("support_ratio_min", 0.7)),
+    )
+
+    sc = req.scoring
+    total_w = sum([
+        sc.get("w_support", 35), sc.get("w_center", 25),
+        sc.get("w_height", 20), sc.get("w_void", 10), sc.get("w_group", 10)
+    ])
+    def norm(v):
+        return float(v) / total_w if total_w > 0 else 0.0
+
+    score_cfg = ScoreConfig(
+        w_support=norm(sc.get("w_support", 35)),
+        w_center=norm(sc.get("w_center", 25)),
+        w_height=norm(sc.get("w_height", 20)),
+        w_void=norm(sc.get("w_void", 10)),
+        w_group=norm(sc.get("w_group", 10)),
+    )
+
+    beam_width = max(1, min(int(req.beam_width), 10))  # 1〜10 に制限
+    result = pack(cases, pallet, supply, rules, score_cfg,
+                  exec_mode=req.exec_mode, beam_width=beam_width)
+    return result_to_dict(result, pallet)
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)

@@ -20,7 +20,6 @@ def parse_input(data: Dict[str, Any]):
     入力JSONを各設定データクラスに変換する。
     戻り値: (cases, pallet, supply, rules, score_cfg, exec_mode)
     """
-    # ケースリスト
     cases: List[CaseItem] = []
     for c in data.get("cases", []):
         cases.append(CaseItem(
@@ -37,9 +36,11 @@ def parse_input(data: Dict[str, Any]):
             group=c.get("group", ""),
             temperature=c.get("temperature", "normal"),
             color=c.get("color", "#4A90D9"),
+            max_top_load=float(c.get("max_top_load", 0.0)),
+            no_flip=bool(c.get("no_flip", False)),
+            support_ratio_required=float(c.get("support_ratio_required", 0.0)),
         ))
 
-    # パレット設定
     p = data.get("pallet", {})
     pallet = PalletConfig(
         length=int(p.get("length", 1100)),
@@ -50,7 +51,6 @@ def parse_input(data: Dict[str, Any]):
         max_weight=float(p.get("max_weight", 1000.0)),
     )
 
-    # 供給設定
     s = data.get("supply", {})
     supply = SupplyConfig(
         mode=s.get("mode", "free"),
@@ -58,7 +58,6 @@ def parse_input(data: Dict[str, Any]):
         fifo_strict=bool(s.get("fifo_strict", True)),
     )
 
-    # 積付ルール
     r = data.get("rules", {})
     rules = RuleConfig(
         fragile_top=bool(r.get("fragile_top", True)),
@@ -74,7 +73,6 @@ def parse_input(data: Dict[str, Any]):
         priority_order=r.get("priority_order", ["heavy_bottom", "fragile_top"]),
     )
 
-    # スコアリング設定
     sc = data.get("scoring", {})
     score_cfg = ScoreConfig(
         w_support=float(sc.get("w_support", 0.35)),
@@ -97,46 +95,50 @@ def result_to_dict(result: PackResult, pallet: PalletConfig) -> Dict[str, Any]:
     """PackResult を出力JSON用辞書に変換する"""
     placements_out = []
     for p in result.placements:
-        placements_out.append({
-            "sku_id": p.sku_id,
-            "name": p.name,
-            "x": p.x,
-            "y": p.y,
-            "z": p.z,
-            "length": p.length,
-            "width": p.width,
-            "height": p.height,
-            "weight": p.weight,
+        entry: Dict[str, Any] = {
+            "sku_id":   p.sku_id,
+            "name":     p.name,
+            "x":        p.x,
+            "y":        p.y,
+            "z":        p.z,
+            "length":   p.length,
+            "width":    p.width,
+            "height":   p.height,
+            "weight":   p.weight,
             "rotation": p.rotation,
-            "group": p.group,
-            "fragile": p.fragile,
-            "color": p.color,
+            "group":    p.group,
+            "fragile":  p.fragile,
+            "color":    p.color,
             "sequence": p.sequence,
-        })
+        }
+        if p.score_breakdown is not None:
+            entry["score_breakdown"] = p.score_breakdown.to_dict()
+        placements_out.append(entry)
 
     return {
         "summary": {
-            "placed_cases": result.placed_cases,
-            "total_cases": result.total_cases,
-            "unplaced_cases": len(result.unplaced),
-            "pallet_count": result.pallet_count,
-            "efficiency_pct": result.efficiency,
+            "placed_cases":      result.placed_cases,
+            "total_cases":       result.total_cases,
+            "unplaced_cases":    len(result.unplaced),
+            "pallet_count":      result.pallet_count,
+            "efficiency_pct":    result.efficiency,
             "max_height_used_mm": result.max_height_used,
-            "total_weight_kg": result.total_weight,
-            "stability_score": result.stability_score,
-            "tier_count": result.tier_count,
-            "exec_mode": result.exec_mode,
-            "supply_mode": result.supply_mode,
+            "total_weight_kg":   result.total_weight,
+            "stability_score":   result.stability_score,
+            "tier_count":        result.tier_count,
+            "exec_mode":         result.exec_mode,
+            "supply_mode":       result.supply_mode,
         },
-        "applied_rules": result.applied_rules,
-        "warnings": result.warnings,
-        "placements": placements_out,
-        "unplaced": result.unplaced,
+        "applied_rules":    result.applied_rules,
+        "warnings":         result.warnings,
+        "placements":       placements_out,
+        "unplaced":         result.unplaced,
         "pallet": {
-            "length": pallet.length,
-            "width": pallet.width,
+            "length":           pallet.length,
+            "width":            pallet.width,
             "effective_height": pallet.effective_height,
-        }
+        },
+        "constraint_hits": result.constraint_hits.to_dict(),
     }
 
 

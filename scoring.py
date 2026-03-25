@@ -1,10 +1,11 @@
 """
 scoring.py — 配置候補のスコアリング
 各候補位置に対してスコア (0.0〜1.0) を計算する。高スコアほど優先。
+compute_score は (total_score, ScoreBreakdown) のタプルを返す。
 """
 from __future__ import annotations
-from typing import List
-from models import Placement, CaseItem, PalletConfig, ScoreConfig, RuleConfig
+from typing import List, Tuple
+from models import Placement, CaseItem, PalletConfig, ScoreConfig, RuleConfig, ScoreBreakdown
 
 
 def score_support_ratio(
@@ -108,7 +109,6 @@ def score_sku_grouping(
     total_neighbors = 0
 
     for p in placements:
-        # 隣接判定（接触面あり）
         x_adj = (x == p.x2 or x + case_l == p.x)
         y_adj = (y == p.y2 or y + case_w == p.y)
         z_adj = (z == p.z2 or z + case_h == p.z)
@@ -137,10 +137,11 @@ def compute_score(
     pallet: PalletConfig,
     score_cfg: ScoreConfig,
     rules: RuleConfig
-) -> float:
+) -> Tuple[float, ScoreBreakdown]:
     """
     全スコアの重み付き合計を返す (0.0〜1.0)。
     RuleConfigのフラグに応じて重みを動的調整。
+    戻り値: (total_score, ScoreBreakdown)
     """
     s_support = score_support_ratio(x, y, z, case_l, case_w, placements)
     s_height = score_height_suppression(z, case_h, pallet)
@@ -168,4 +169,13 @@ def compute_score(
         s_group * w_group
     )
 
-    return min(1.0, max(0.0, score))
+    total = min(1.0, max(0.0, score))
+    breakdown = ScoreBreakdown(
+        support_score=round(s_support, 4),
+        center_score=round(s_position, 4),
+        height_score=round(s_height, 4),
+        void_score=round(s_void, 4),
+        group_score=round(s_group, 4),
+        total_score=round(total, 4),
+    )
+    return total, breakdown

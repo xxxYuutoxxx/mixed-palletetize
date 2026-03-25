@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>混載パレタイズ積付計算システム</title>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Meiryo', 'メイリオ', sans-serif; background: #eef1f5; color: #2c3e50; min-width: 1280px; font-size: 13px; }
@@ -329,6 +332,26 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
   padding-left: 8px; border-left: 1px solid rgba(255,255,255,.12);
 }
 
+/* ── CONSTRAINT HITS ── */
+.constraint-hits-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 14px; }
+.constraint-hit-card {
+  background: #f8fafc; border: 1px solid #dde4ea; border-radius: 6px;
+  padding: 10px 14px; text-align: center;
+}
+.constraint-hit-card.has-hits { border-color: #f5c6a9; background: #fff8f3; }
+.constraint-hit-label { font-size: 10px; font-weight: 700; color: #8a9ab0; margin-bottom: 4px; text-transform: uppercase; }
+.constraint-hit-count { font-size: 22px; font-weight: 700; color: #1a3a5c; line-height: 1; }
+.constraint-hit-card.has-hits .constraint-hit-count { color: #e67e22; }
+.constraint-hit-bar-wrap { background: #e8ecef; border-radius: 4px; height: 8px; margin-top: 6px; }
+.constraint-hit-bar { height: 100%; border-radius: 4px; background: #e67e22; transition: width .4s; }
+.constraint-total-row { font-size: 11px; color: #8a9ab0; margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee; }
+
+/* ── SCORE BREAKDOWN TABLE ── */
+.score-bd-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.score-bd-table th { background: #f0f4f8; color: #5a7a96; padding: 7px 10px; text-align: center; font-weight: 700; border-bottom: 2px solid #dde4ea; }
+.score-bd-table td { padding: 6px 10px; border-bottom: 1px solid #eee; text-align: center; }
+.score-bar-mini { display: inline-block; height: 6px; border-radius: 3px; vertical-align: middle; margin-left: 4px; }
+
 /* ── CONFLICT PANEL ── */
 .conflict-panel {
   border-radius: 8px; overflow: hidden; margin-bottom: 18px;
@@ -432,6 +455,22 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 #toast.warn { background: #e67e22; }
+
+/* ── PRINT / PDF ── */
+@media print {
+  body { min-width: 0; background: #fff; font-size: 11px; }
+  .header, .exec-mode-bar, .tabs, #tab0, #tab1, #tab2, .result-bottom-bar,
+  #emptyResult, #toast { display: none !important; }
+  #tab3 { display: block !important; }
+  .tab-panel { display: block !important; padding: 0; }
+  .main { padding: 0; max-width: none; }
+  #resultContent { display: block !important; }
+  canvas { max-width: 100%; }
+  .kpi-grid { grid-template-columns: repeat(4,1fr); }
+  .results-layout { grid-template-columns: 1fr; }
+  .view-tab-panel { display: block !important; }
+  .result-section { page-break-inside: avoid; }
+}
 </style>
 </head>
 <body>
@@ -496,6 +535,11 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
   <div class="tab-panel active" id="tab0">
     <div class="card">
       <div class="card-title">ケース情報入力</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+        <button class="btn btn-secondary" onclick="document.getElementById('importFileInput').click()">📂 CSV / Excel 読込</button>
+        <input type="file" id="importFileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleImportFile(this)">
+        <span class="hint-inline">CSV列順: 品番, 品名, 長さ, 幅, 高さ, 重量, 数量[, グループ, fragile, no_flip, max_top_load, 温度帯]</span>
+      </div>
       <div id="validationSummary"></div>
       <div class="table-wrap">
         <table class="case-table">
@@ -519,8 +563,8 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
       </div>
       <div class="bottom-bar">
         <button class="btn btn-secondary" id="addRowBtn" onclick="addRow()">＋ ケース追加</button>
-        <span class="count-badge">登録数: <span id="caseCount">0</span> / 10</span>
-        <span class="hint-inline">最大10品種まで登録できます</span>
+        <span class="count-badge">登録数: <span id="caseCount">0</span> / 30</span>
+        <span class="hint-inline">最大30品種まで登録できます</span>
         <div style="flex:1"></div>
         <button class="btn btn-secondary" onclick="clearAll()">全クリア</button>
         <button class="btn btn-primary" onclick="runCalc()">▶ 計算実行</button>
@@ -853,11 +897,12 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
         </div>
         <div class="exec-field">
           <label>解探索モード</label>
-          <select>
-            <option>高速（貪欲法）</option>
-            <option selected>標準（局所探索）</option>
-            <option>高精度（ビームサーチ）</option>
+          <select id="searchModeSelect">
+            <option value="1">高速（貪欲法）</option>
+            <option value="3" selected>標準（ビームサーチ width=3）</option>
+            <option value="5">高精度（ビームサーチ width=5）</option>
           </select>
+          <div class="hint-text">幅が大きいほど精度UP・計算時間増</div>
         </div>
         <div class="exec-field">
           <label>ランダムシード</label>
@@ -981,7 +1026,8 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
             <svg id="sideView" width="480" height="220" style="display:block;margin:0 auto;"></svg>
           </div>
           <div class="view-tab-panel" id="vtab2">
-            <svg id="isoView" width="480" height="320" style="display:block;margin:0 auto;"></svg>
+            <canvas id="isoView" width="480" height="320" style="display:block;margin:0 auto;border-radius:6px;"></canvas>
+            <div style="font-size:10px;color:#a0b0c0;text-align:center;margin-top:4px;">マウス左ボタン:回転 / ホイール:ズーム / 右ボタン:パン</div>
           </div>
           <div style="margin-top:12px;">
             <div style="font-size:11px;font-weight:700;color:#5a7a96;margin-bottom:6px;">凡例</div>
@@ -1085,6 +1131,32 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
         </div>
       </div>
 
+      <!-- Constraint hits -->
+      <div class="result-section" id="constraintHitsSection" style="display:none;">
+        <div class="result-section-title">制約ヒット集計 — 棄却された配置候補の分析</div>
+        <div class="card" style="padding:14px 18px;">
+          <div class="constraint-hits-grid" id="constraintHitsGrid"></div>
+          <div class="constraint-total-row" id="constraintTotalRow"></div>
+        </div>
+      </div>
+
+      <!-- Score breakdown -->
+      <div class="result-section" id="scoreBreakdownSection" style="display:none;">
+        <div class="result-section-title">スコア内訳 — 採用配置のスコア詳細（先頭20件）</div>
+        <div class="card" style="padding:14px 18px;">
+          <table class="score-bd-table">
+            <thead>
+              <tr>
+                <th>No.</th><th>品番</th><th>品名</th>
+                <th>支持率</th><th>重心</th><th>高さ</th><th>空隙</th><th>集約</th>
+                <th>合計スコア</th>
+              </tr>
+            </thead>
+            <tbody id="scoreBreakdownBody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Warnings -->
       <div class="result-section">
         <div class="result-section-title">判定・警告</div>
@@ -1149,8 +1221,8 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
 
       <!-- Bottom bar -->
       <div class="result-bottom-bar">
-        <button class="btn btn-outline">📄 レポート出力 (PDF)</button>
-        <button class="btn btn-secondary">⬇ CSV出力</button>
+        <button class="btn btn-outline" onclick="exportPDF()">📄 レポート出力 (PDF)</button>
+        <button class="btn btn-secondary" onclick="exportCSV()">⬇ CSV出力</button>
         <div style="flex:1"></div>
         <button class="btn btn-primary" onclick="switchTab(0)">↩ 再計算する</button>
       </div>
@@ -1424,7 +1496,7 @@ function validateInput(inp) {
 
 /* ── ADD ROW ── */
 function addRow(data) {
-  if (rows.length >= 10) { showToast('最大10品種まで登録できます', 'warn'); return; }
+  if (rows.length >= 30) { showToast('最大30品種まで登録できます', 'warn'); return; }
   var rid = ++rowId;
   rows.push(rid);
   updateCount();
@@ -1537,8 +1609,17 @@ function collectCases() {
     var wt   = parseFloat(tr.querySelector('.inp-wt').value)  || 0;
     var qty  = parseInt(tr.querySelector('.inp-qty').value)   || 0;
     var grp  = tr.querySelector('.inp-grp').value.trim();
+    var dtr        = document.getElementById('detail_' + tr.id.replace('row_', ''));
+    var fragile    = dtr ? !!(dtr.querySelector('.inp-fragile') || {}).checked    : false;
+    var noFlip     = dtr ? !!(dtr.querySelector('.inp-topdown') || {}).checked    : false;
+    var topLoad    = dtr ? parseFloat((dtr.querySelector('.inp-topload') || {value:'0'}).value) || 0 : 0;
+    var tempSel    = dtr ? (dtr.querySelector('.inp-temp') || {value:'常温'}).value : '常温';
+    var tempMap    = {'常温':'normal','冷蔵':'chilled','冷凍':'frozen'};
+    var temp       = tempMap[tempSel] || 'normal';
+
     if (id && name && l && w && h && wt && qty) {
-      result.push({idx:idx, id:id, name:name, l:l, w:w, h:h, wt:wt, qty:qty, group:grp});
+      result.push({idx:idx, id:id, name:name, l:l, w:w, h:h, wt:wt, qty:qty, group:grp,
+                   fragile:fragile, no_flip:noFlip, max_top_load:topLoad, temperature:temp});
     }
   });
   return result;
@@ -1551,8 +1632,200 @@ function runCalc() {
   if (document.querySelectorAll('#caseBody input.invalid').length > 0) {
     showToast('入力エラーを修正してください', 'warn'); return;
   }
-  computeDummyResults(cases);
-  switchTab(3);
+
+  var PL = getPalletL(), PW = getPalletW(), PH = getPalletH(), effH = getEffH();
+  var bufSize = parseInt((document.getElementById('bufferSize') || {value:'3'}).value) || 3;
+
+  var payload = {
+    cases: cases.map(function(c) {
+      return {
+        sku_id: c.id, name: c.name,
+        length: c.l, width: c.w, height: c.h,
+        weight: c.wt, quantity: c.qty,
+        group: c.group || '',
+        color: CASE_COLORS[c.idx % CASE_COLORS.length],
+        fragile:                c.fragile        || false,
+        no_flip:                c.no_flip        || false,
+        max_top_load:           c.max_top_load   || 0,
+        temperature:            c.temperature    || 'normal',
+      };
+    }),
+    pallet: {
+      length: PL, width: PW, base_height: PH,
+      max_height: PH + effH, effective_height: effH,
+      max_weight: parseFloat((document.getElementById('maxWeightInput') || {value:'1000'}).value) || 1000
+    },
+    supply: { mode: supplyMode, buffer_size: bufSize },
+    rules: {
+      fragile_top:    !!(document.getElementById('cbFragileTop')    || {}).checked,
+      heavy_bottom:   !!(document.getElementById('cbHeavyBottom')   || {}).checked,
+      same_group:     !!(document.getElementById('cbSameGroup')     || {}).checked,
+      center_priority:!!(document.getElementById('cbCenterPrio')    || {}).checked,
+      outer_priority: !!(document.getElementById('cbOuterPrio')     || {}).checked,
+      stack_priority: !!(document.getElementById('cbStackPriority') || {}).checked,
+      no_overhang:    !!(document.getElementById('cbNoOverhang')    || {}).checked,
+      temp_separate:  !!(document.getElementById('cbTempSeparate')  || {}).checked
+    },
+    scoring: {
+      w_support: parseInt((document.getElementById('weight_stability')  || {value:'50'}).value) || 50,
+      w_center:  parseInt((document.getElementById('weight_loadRate')   || {value:'50'}).value) || 50,
+      w_height:  parseInt((document.getElementById('weight_height')     || {value:'30'}).value) || 30,
+      w_void:    20,
+      w_group:   parseInt((document.getElementById('weight_grouping')   || {value:'30'}).value) || 30
+    },
+    exec_mode: execMode,
+    beam_width: parseInt((document.getElementById('searchModeSelect') || {value:'1'}).value) || 1
+  };
+
+  showToast('計算中...');
+  fetch('/api/pack', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(function(r) {
+    if (!r.ok) return r.text().then(function(t) { throw new Error(t); });
+    return r.json();
+  })
+  .then(function(data) {
+    applyRealResults(data, cases);
+    switchTab(3);
+  })
+  .catch(function(e) {
+    showToast('計算エラー: ' + e.message, 'warn');
+  });
+}
+
+/* ── CSV / EXCEL IMPORT ── */
+function handleImportFile(input) {
+  var file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  var ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'csv') {
+    var reader = new FileReader();
+    reader.onload = function(e) { parseImportData(e.target.result, 'csv'); };
+    reader.readAsText(file, 'UTF-8');
+  } else if (ext === 'xlsx' || ext === 'xls') {
+    if (typeof XLSX === 'undefined') { showToast('SheetJSライブラリ読込中...再度お試しください', 'warn'); return; }
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var wb = XLSX.read(e.target.result, { type: 'array' });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var csv = XLSX.utils.sheet_to_csv(ws);
+      parseImportData(csv, 'csv');
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    showToast('CSV (.csv) または Excel (.xlsx/.xls) ファイルを選択してください', 'warn');
+  }
+}
+
+function parseImportData(text, fmt) {
+  var lines = text.split(/\r?\n/).filter(function(l) { return l.trim(); });
+  if (lines.length < 2) { showToast('データが空です', 'warn'); return; }
+
+  // ヘッダ行を解析（英語・日本語どちらも対応）
+  var headers = lines[0].split(',').map(function(h) { return h.trim().replace(/"/g, '').toLowerCase(); });
+  var colMap = {};
+  var JP = { '品番':'sku_id','品名':'name','長さ':'length','長さ(mm)':'length','幅':'width','幅(mm)':'width',
+             '高さ':'height','高さ(mm)':'height','重量':'weight','重量(kg)':'weight','数量':'quantity',
+             'グループ':'group','fragile':'fragile','no_flip':'no_flip',
+             'max_top_load':'max_top_load','温度帯':'temperature','temperature':'temperature' };
+  headers.forEach(function(h, i) {
+    var key = JP[h] || h;
+    colMap[key] = i;
+  });
+
+  var positional = ['sku_id','name','length','width','height','weight','quantity',
+                    'group','fragile','no_flip','max_top_load','temperature'];
+
+  var rows = [];
+  for (var li = 1; li < lines.length; li++) {
+    var cells = lines[li].split(',').map(function(c) { return c.trim().replace(/"/g, ''); });
+    if (cells.every(function(c) { return !c; })) continue;
+
+    function get(key, def) {
+      var idx = (colMap[key] !== undefined) ? colMap[key] : positional.indexOf(key);
+      return (idx >= 0 && cells[idx] !== undefined && cells[idx] !== '') ? cells[idx] : def;
+    }
+
+    rows.push({
+      id:           get('sku_id', 'SKU' + (li)),
+      name:         get('name', '商品' + li),
+      l:            parseInt(get('length', 300)) || 300,
+      w:            parseInt(get('width', 200))  || 200,
+      h:            parseInt(get('height', 150)) || 150,
+      wt:           parseFloat(get('weight', 5)) || 5,
+      qty:          parseInt(get('quantity', 1)) || 1,
+      group:        get('group', ''),
+      fragile:      get('fragile', '0') === '1' || get('fragile','') === 'true',
+      no_flip:      get('no_flip', '0') === '1' || get('no_flip','') === 'true',
+      max_top_load: parseFloat(get('max_top_load', 0)) || 0,
+      temperature:  get('temperature', 'normal'),
+    });
+  }
+
+  if (rows.length === 0) { showToast('有効なデータ行がありません', 'warn'); return; }
+
+  var maxRows = 30;
+  if (rows.length > maxRows) {
+    rows = rows.slice(0, maxRows);
+    showToast(maxRows + '品種を超えるため先頭' + maxRows + '件のみ読込みました', 'warn');
+  }
+
+  // テーブルをクリアして行を追加
+  var tbody = document.getElementById('caseBody');
+  tbody.innerHTML = '';
+  rowCount = 0;
+  rows.forEach(function(r) {
+    addRow();
+    var idx = rowCount - 1;
+    var tr = tbody.rows[idx];
+    if (!tr) return;
+    tr.querySelector('.inp-id').value   = r.id;
+    tr.querySelector('.inp-name').value = r.name;
+    tr.querySelector('.inp-l').value    = r.l;
+    tr.querySelector('.inp-w').value    = r.w;
+    tr.querySelector('.inp-h').value    = r.h;
+    tr.querySelector('.inp-wt').value   = r.wt;
+    tr.querySelector('.inp-qty').value  = r.qty;
+    var grpEl = tr.querySelector('.inp-grp');
+    if (grpEl) grpEl.value = r.group;
+    // 詳細フィールドに反映
+    var fragCb   = tr.querySelector('[data-key="fragile"]');
+    var noflipCb = tr.querySelector('[data-key="no_flip"]');
+    var mtlEl    = tr.querySelector('[data-key="max_top_load"]');
+    var tempEl   = tr.querySelector('[data-key="temperature"]');
+    if (fragCb)   fragCb.checked   = r.fragile;
+    if (noflipCb) noflipCb.checked = r.no_flip;
+    if (mtlEl)    mtlEl.value      = r.max_top_load;
+    if (tempEl)   tempEl.value     = r.temperature;
+  });
+  updateCaseCount();
+  showToast(rows.length + '件のケースを読み込みました');
+}
+
+/* ── CSV EXPORT ── */
+function exportCSV() {
+  if (!lastResult || !lastResult.placements) { showToast('計算結果がありません', 'warn'); return; }
+  var header = ['No','品番','品名','X(mm)','Y(mm)','Z(mm)','長さ','幅','高さ','重量(kg)','回転','グループ','温度帯'];
+  var rows = lastResult.placements.map(function(p, i) {
+    return [i+1, p.sku_id, p.name, p.x, p.y, p.z, p.length, p.width, p.height, p.weight,
+            p.rotation + '°', p.group || '', p.temperature || 'normal'].join(',');
+  });
+  var csv = '\uFEFF' + header.join(',') + '\n' + rows.join('\n');
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'pallet_result.csv';
+  a.click();
+}
+
+/* ── PDF EXPORT ── */
+function exportPDF() {
+  if (!lastResult) { showToast('計算結果がありません', 'warn'); return; }
+  window.print();
 }
 
 /* ── PRESETS ── */
@@ -1597,7 +1870,7 @@ function svgEl(tag, attrs) {
 }
 
 /* ── TOP VIEW ── */
-function drawTopView(cases, tiers) {
+function drawTopView(cases, placements) {
   var svg = document.getElementById('topView');
   svg.innerHTML = '';
   var W = 480, H = 260;
@@ -1614,28 +1887,22 @@ function drawTopView(cases, tiers) {
   svg.appendChild(svgEl('line', {x1:cx-6,y1:cy,x2:cx+6,y2:cy,stroke:'#e74c3c','stroke-width':'1.5'}));
   svg.appendChild(svgEl('line', {x1:cx,y1:cy-6,x2:cx,y2:cy+6,stroke:'#e74c3c','stroke-width':'1.5'}));
 
-  /* tiers footprint */
-  tiers.forEach(function(t) {
-    for (var r = 0; r < t.rowsN; r++) {
-      for (var c = 0; c < t.cols; c++) {
-        var bx = c * t.l, by = r * t.w;
-        if (bx+t.l <= PL+1 && by+t.w <= PW+1) {
-          svg.appendChild(svgEl('rect', {
-            x:ox+bx*sx+1, y:oy+by*sy+1,
-            width:t.l*sx-2, height:t.w*sy-2,
-            fill:t.color, opacity:'0.78', rx:'2'
-          }));
-          if (t.l*sx > 22 && t.w*sy > 13) {
-            var lbl = svgEl('text', {
-              x: ox+bx*sx+t.l*sx/2, y: oy+by*sy+t.w*sy/2+4,
-              'text-anchor':'middle', fill:'#fff',
-              'font-size':'9px', 'font-family':'Meiryo,sans-serif', 'font-weight':'700'
-            });
-            lbl.textContent = t.id;
-            svg.appendChild(lbl);
-          }
-        }
-      }
+  /* placements footprint (Z降順で描画: 上のものが見える) */
+  var sorted = placements.slice().sort(function(a,b){return a.z-b.z;});
+  sorted.forEach(function(p) {
+    svg.appendChild(svgEl('rect', {
+      x:ox+p.x*sx+1, y:oy+p.y*sy+1,
+      width:p.length*sx-2, height:p.width*sy-2,
+      fill:p.color, opacity:'0.78', rx:'2'
+    }));
+    if (p.length*sx > 22 && p.width*sy > 13) {
+      var lbl = svgEl('text', {
+        x: ox+p.x*sx+p.length*sx/2, y: oy+p.y*sy+p.width*sy/2+4,
+        'text-anchor':'middle', fill:'#fff',
+        'font-size':'9px', 'font-family':'Meiryo,sans-serif', 'font-weight':'700'
+      });
+      lbl.textContent = p.sku_id;
+      svg.appendChild(lbl);
     }
   });
 
@@ -1652,7 +1919,7 @@ function drawTopView(cases, tiers) {
 }
 
 /* ── SIDE VIEW ── */
-function drawSideView(tiers) {
+function drawSideView(placements) {
   var svg = document.getElementById('sideView');
   svg.innerHTML = '';
   var W = 480, H = 220;
@@ -1670,27 +1937,25 @@ function drawSideView(tiers) {
   mH.textContent = effH;
   svg.appendChild(mH);
 
-  var zAcc = 0;
-  tiers.slice(0,14).forEach(function(t) {
-    var yTop = oy + (effH - zAcc - t.h) * sy;
-    var rh   = t.h * sy;
-    if (yTop >= oy && rh > 0) {
+  placements.forEach(function(p) {
+    var yTop = oy + (effH - p.z - p.height) * sy;
+    var rh   = p.height * sy;
+    if (yTop < oy + effH*sy && rh > 0) {
       svg.appendChild(svgEl('rect', {
-        x:ox+2, y:Math.max(oy,yTop), width:PL*sx-4,
-        height:Math.min(rh, effH*sy-(effH-zAcc-t.h)*sy),
-        fill:t.color, opacity:'0.82', rx:'1'
+        x: ox + p.x * sx, y: Math.max(oy, yTop),
+        width: p.length * sx, height: Math.max(1, rh),
+        fill: p.color, opacity: '0.82', rx: '1'
       }));
       if (rh > 10) {
         var lbl = svgEl('text', {
-          x:ox+PL*sx/2, y:Math.max(oy+10, yTop+rh/2+4),
+          x: ox + p.x*sx + p.length*sx/2, y: Math.max(oy+10, yTop+rh/2+4),
           'text-anchor':'middle', fill:'#fff',
           'font-size':'9px', 'font-family':'Meiryo,sans-serif', 'font-weight':'700'
         });
-        lbl.textContent = t.id + ' (' + t.h + 'mm)';
+        lbl.textContent = p.sku_id + ' (' + p.height + 'mm)';
         svg.appendChild(lbl);
       }
     }
-    zAcc += t.h;
   });
 
   [0, Math.floor(effH/2), effH].forEach(function(v) {
@@ -1709,79 +1974,80 @@ function drawSideView(tiers) {
   svg.appendChild(xL);
 }
 
-/* ── ISO VIEW ── */
-function drawIsoView(cases, tiers) {
-  var svg = document.getElementById('isoView');
-  svg.innerHTML = '';
+/* ── ISO VIEW (Three.js) ── */
+var _three = { renderer: null, animId: null };
+
+function drawIsoView(cases, placements) {
+  if (_three.animId)    { cancelAnimationFrame(_three.animId); _three.animId = null; }
+  if (_three.renderer)  { _three.renderer.dispose(); _three.renderer = null; }
+
+  if (typeof THREE === 'undefined') return;
+
+  var canvas = document.getElementById('isoView');
   var W = 480, H = 320;
-  var PL = getPalletL(), PW = getPalletW();
-  var scaleXY = Math.min(160/PL, 140/PW);
-  var scaleZ  = 0.06;
-  var OX = W*0.5, OY = H*0.78;
-  var COS30 = Math.cos(Math.PI/6), SIN30 = Math.sin(Math.PI/6);
+  var PL = getPalletL(), PW = getPalletW(), effH = getEffH();
 
-  function proj(x, y, z) {
-    return {
-      px: OX + (x-y)*COS30*scaleXY,
-      py: OY - (x+y)*SIN30*scaleXY - z*scaleZ
-    };
-  }
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+  renderer.setSize(W, H);
+  renderer.setClearColor(0xf0f4f8);
+  renderer.shadowMap.enabled = true;
+  _three.renderer = renderer;
 
-  function hexRgb(hex) {
-    return {
-      r: parseInt(hex.slice(1,3),16),
-      g: parseInt(hex.slice(3,5),16),
-      b: parseInt(hex.slice(5,7),16)
-    };
-  }
-  function lighten(hex, f) {
-    var c = hexRgb(hex);
-    return 'rgb(' + Math.min(255,Math.round(c.r+f*100)) + ',' + Math.min(255,Math.round(c.g+f*100)) + ',' + Math.min(255,Math.round(c.b+f*100)) + ')';
-  }
-  function darken(hex, f) {
-    var c = hexRgb(hex);
-    return 'rgb(' + Math.max(0,Math.round(c.r-f*80)) + ',' + Math.max(0,Math.round(c.g-f*80)) + ',' + Math.max(0,Math.round(c.b-f*80)) + ')';
-  }
+  var scene = new THREE.Scene();
 
-  function face(pts, fill, stroke) {
-    svg.appendChild(svgEl('polygon', {
-      points: pts.map(function(p){return p.px.toFixed(1)+','+p.py.toFixed(1);}).join(' '),
-      fill: fill, stroke: stroke||fill, 'stroke-width':'0.5'
-    }));
-  }
+  /* カメラ */
+  var camera = new THREE.PerspectiveCamera(45, W / H, 1, 20000);
+  camera.position.set(PL * 1.8, -PW * 0.8, effH * 1.4);
+  camera.up.set(0, 0, 1);
 
-  function box(x, y, z, bw, bd, bh, color) {
-    face([proj(x,y,z+bh),proj(x+bw,y,z+bh),proj(x+bw,y+bd,z+bh),proj(x,y+bd,z+bh)], lighten(color,0.35), 'rgba(255,255,255,0.2)');
-    face([proj(x+bw,y,z+bh),proj(x+bw,y,z),proj(x+bw,y+bd,z),proj(x+bw,y+bd,z+bh)], color, 'rgba(0,0,0,0.08)');
-    face([proj(x,y+bd,z+bh),proj(x+bw,y+bd,z+bh),proj(x+bw,y+bd,z),proj(x,y+bd,z)], darken(color,0.2), 'rgba(0,0,0,0.08)');
-  }
+  /* OrbitControls */
+  var controls = new THREE.OrbitControls(camera, canvas);
+  controls.target.set(PL / 2, PW / 2, effH / 4);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.1;
+  controls.update();
 
-  /* pallet base */
-  var ph = 150;
-  face([proj(0,0,0),proj(PL,0,0),proj(PL,PW,0),proj(0,PW,0)], '#c8a96e','#8b6914');
-  face([proj(PL,0,0),proj(PL,0,-ph),proj(PL,PW,-ph),proj(PL,PW,0)], '#a0804a','#8b6914');
-  face([proj(0,PW,0),proj(PL,PW,0),proj(PL,PW,-ph),proj(0,PW,-ph)], '#8b6914','#8b6914');
+  /* ライト */
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  var dLight = new THREE.DirectionalLight(0xffffff, 0.75);
+  dLight.position.set(PL * 2, -PW, effH * 3);
+  scene.add(dLight);
 
-  /* boxes */
-  var zAcc = 0, curX = 0, curY = 0;
-  tiers.forEach(function(t) {
-    for (var r = 0; r < t.rowsN; r++) {
-      for (var c = 0; c < t.cols; c++) {
-        var bx = curX + c*t.l, by = curY + r*t.w;
-        if (bx+t.l <= PL+1 && by+t.w <= PW+1) {
-          box(bx, by, zAcc, t.l, t.w, t.h, t.color);
-        }
-      }
-    }
-    zAcc += t.h;
-    curX += t.cols * t.l;
-    if (curX + t.l > PL) { curX = 0; curY += t.rowsN * t.w; }
-    if (curY > PW) { curY = 0; zAcc = 0; }
+  /* パレット台 */
+  var palGeo = new THREE.BoxGeometry(PL, PW, 140);
+  var palMat = new THREE.MeshLambertMaterial({ color: 0xc8a96e });
+  var palMesh = new THREE.Mesh(palGeo, palMat);
+  palMesh.position.set(PL / 2, PW / 2, -70);
+  scene.add(palMesh);
+  var palEdges = new THREE.EdgesGeometry(palGeo);
+  var palLine = new THREE.LineSegments(palEdges, new THREE.LineBasicMaterial({ color: 0x8b6914 }));
+  palLine.position.copy(palMesh.position);
+  scene.add(palLine);
+
+  /* ケース */
+  placements.forEach(function(p) {
+    var gap = 2;
+    var geo = new THREE.BoxGeometry(p.length - gap, p.width - gap, p.height - gap);
+    var col = parseInt(p.color.replace('#', '0x'));
+    var mat = new THREE.MeshLambertMaterial({ color: col });
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(p.x + p.length / 2, p.y + p.width / 2, p.z + p.height / 2);
+    scene.add(mesh);
+
+    var edges = new THREE.EdgesGeometry(geo);
+    var line = new THREE.LineSegments(edges,
+      new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25 }));
+    line.position.copy(mesh.position);
+    scene.add(line);
   });
 
-  var ttl = svgEl('text', {x:W/2,y:16,'text-anchor':'middle',fill:'#5a7a96','font-size':'12px','font-family':'Meiryo,sans-serif'});
-  ttl.textContent = '等角3D積付ビュー（モック）';
-  svg.appendChild(ttl);
+  /* アニメーションループ */
+  function animate() {
+    _three.animId = requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
 }
 
 /* ── LEGEND ── */
@@ -1877,7 +2143,9 @@ function computeDummyResults(cases) {
   document.getElementById('statusCaseLogic').textContent  = '選択ロジック: ' + caseLogicLabels[supplyMode];
   document.getElementById('statusExecMode').textContent   = EXEC_MODE_LABELS[execMode];
   document.getElementById('statusExecMode').className     = 'status-badge ' + execModeBadgeClass[execMode];
-  document.getElementById('statusAlgo').textContent = (document.getElementById('algoSelect') || {value:'層別積み'}).value;
+  var bw = parseInt((document.getElementById('searchModeSelect') || {value:'1'}).value) || 1;
+  var algoLabel = bw > 1 ? 'ビームサーチ(w=' + bw + ')' : '貪欲法';
+  document.getElementById('statusAlgo').textContent = algoLabel;
 
   /* ── applied conditions ── */
   document.getElementById('appliedExecMode').textContent   = EXEC_MODE_LABELS[execMode];
@@ -1983,6 +2251,256 @@ function computeDummyResults(cases) {
   document.getElementById('emptyResult').style.display   = 'none';
   document.getElementById('resultContent').style.display = 'block';
   showToast('計算が完了しました');
+}
+
+/* ── APPLY REAL RESULTS (APIレスポンスをUIに反映) ── */
+var lastResult = null;
+function applyRealResults(data, cases) {
+  lastResult = data;
+  var sm = data.summary;
+  var placements = data.placements || [];
+  var unplaced   = data.unplaced   || [];
+  var PL = getPalletL(), PW = getPalletW();
+
+  /* ── KPIs ── */
+  document.getElementById('kpiEff').textContent       = sm.efficiency_pct;
+  document.getElementById('kpiPallets').textContent   = sm.pallet_count;
+  document.getElementById('kpiTotal').textContent     = sm.placed_cases;
+  document.getElementById('kpiWeight').textContent    = sm.total_weight_kg;
+  document.getElementById('kpiTiers').textContent     = sm.tier_count;
+  document.getElementById('kpiHeight').textContent    = sm.max_height_used_mm;
+  var stab = Math.round(sm.stability_score);
+  document.getElementById('kpiStability').textContent = stab + '点';
+  document.getElementById('kpiStability').style.color = stab >= 80 ? '#27ae60' : stab >= 60 ? '#e67e22' : '#e74c3c';
+  document.getElementById('kpiUnplaced').textContent  = unplaced.length;
+  document.getElementById('warnEff').textContent      = sm.efficiency_pct;
+
+  /* ── Ideal vs Actual (JS簡易計算) ── */
+  var idealEff   = parseFloat(computeIdealEff(cases));
+  var actualEffN = parseFloat(sm.efficiency_pct);
+  var diffEffN   = (idealEff - actualEffN).toFixed(1);
+  document.getElementById('idealEff').textContent  = idealEff;
+  document.getElementById('actualEff').textContent = actualEffN;
+  document.getElementById('diffEff').textContent   = (diffEffN > 0 ? '−' : '') + Math.abs(diffEffN);
+  document.getElementById('idealCauseText').textContent =
+    diffEffN <= 0.5
+      ? '▲ 設定されている制約による積載率への影響はほぼありません（差分 ' + diffEffN + '% pt）。'
+      : '▼ 積載率損失の推定原因: ケース形状・制約の適用。損失 −' + diffEffN + '% pt。';
+
+  /* ── Mode labels ── */
+  var modeLabels = { free:'🔀 順番自由モード', fifo:'➡ FIFO制約モード', buffer:'📦 バッファモード' };
+  var caseLogicLabels = { free:'完全最適', fifo:'順序固定', buffer:'バッファ内最適' };
+  var execModeBadgeClass = { ideal:'badge-execmode-ideal', real:'badge-execmode-real', robot:'badge-execmode-robot' };
+  document.getElementById('statusSupplyMode').textContent = modeLabels[supplyMode] || supplyMode;
+  document.getElementById('statusCaseLogic').textContent  = '選択ロジック: ' + (caseLogicLabels[supplyMode] || supplyMode);
+  document.getElementById('statusExecMode').textContent   = EXEC_MODE_LABELS[execMode];
+  document.getElementById('statusExecMode').className     = 'status-badge ' + (execModeBadgeClass[execMode] || '');
+  var bw = parseInt((document.getElementById('searchModeSelect') || {value:'1'}).value) || 1;
+  var algoLabel = bw > 1 ? 'ビームサーチ(w=' + bw + ')' : '貪欲法';
+  document.getElementById('statusAlgo').textContent = algoLabel;
+
+  /* ── Applied conditions ── */
+  document.getElementById('appliedExecMode').textContent  = EXEC_MODE_LABELS[execMode];
+  document.getElementById('appliedCaseLogic').textContent = caseLogicLabels[supplyMode] || supplyMode;
+  document.getElementById('appliedSupply').textContent    = modeLabels[supplyMode] || supplyMode;
+  document.getElementById('appliedAlgo').textContent      = (document.getElementById('algoSelect') || {value:'層別積み'}).value;
+  document.getElementById('appliedPreset').textContent    = PRESET_LABELS[currentPreset];
+
+  /* ── Applied rules list ── */
+  var ruleItems = [];
+  document.querySelectorAll('#dragList .drag-item').forEach(function(el) {
+    var num  = el.querySelector('.drag-num').textContent;
+    var text = el.querySelector('span:last-child').textContent;
+    ruleItems.push('<div class="applied-rule-item"><span class="rule-rank">' + num + '</span>' + escHtml(text) + '</div>');
+  });
+  var ruleHtml = (data.applied_rules || []).map(function(r) {
+    return '<div class="applied-rule-item"><span class="rule-rank" style="background:#27ae60;">✓</span>' + escHtml(r) + '</div>';
+  });
+  document.getElementById('appliedRulesList').innerHTML = ruleItems.join('') +
+    (ruleHtml.length > 0 ? '<div style="font-size:11px;color:#8a9ab0;margin:8px 0 4px;font-weight:700;">有効な積付制約</div>' + ruleHtml.join('') : '');
+
+  /* ── Tier table (Z段ごとにグループ化) ── */
+  var tbody = document.getElementById('tierBody');
+  tbody.innerHTML = '';
+  var zGroups = {};
+  placements.forEach(function(p) {
+    var key = p.z;
+    if (!zGroups[key]) zGroups[key] = [];
+    zGroups[key].push(p);
+  });
+  var tierNum = 1;
+  Object.keys(zGroups).sort(function(a,b) { return parseInt(a)-parseInt(b); }).forEach(function(z) {
+    zGroups[z].forEach(function(p) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td><span class="tier-badge">' + tierNum++ + '</span></td>' +
+        '<td>' + escHtml(p.sku_id) + '</td>' +
+        '<td><span class="color-dot" style="background:' + p.color + '"></span>' + escHtml(p.name) + '</td>' +
+        '<td>1×1</td><td>1</td><td>' + p.height + '</td>';
+      tbody.appendChild(tr);
+    });
+  });
+
+  /* ── Placement table ── */
+  var placeTbody = document.getElementById('placementBody');
+  placeTbody.innerHTML = '';
+  placements.slice(0, 20).forEach(function(p, i) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + (i+1) + '</td>' +
+      '<td>' + escHtml(p.sku_id) + '</td>' +
+      '<td>' + escHtml(p.name) + '</td>' +
+      '<td>' + (Object.keys(zGroups).sort(function(a,b){return parseInt(a)-parseInt(b);}).indexOf(String(p.z))+1) + '段</td>' +
+      '<td>X:' + p.x + 'mm / Y:' + p.y + 'mm</td>' +
+      '<td>' + (p.rotation === 90 ? '90°回転' : '正置き') + '</td><td>—</td>';
+    placeTbody.appendChild(tr);
+  });
+
+  /* ── CG (重心: 配置済みケースの重量重心) ── */
+  var totalW = 0, cgXSum = 0, cgYSum = 0;
+  placements.forEach(function(p) {
+    cgXSum += (p.x + p.length/2) * p.weight;
+    cgYSum += (p.y + p.width/2)  * p.weight;
+    totalW += p.weight;
+  });
+  var cgX = totalW > 0 ? Math.round(cgXSum / totalW) : Math.round(PL/2);
+  var cgY = totalW > 0 ? Math.round(cgYSum / totalW) : Math.round(PW/2);
+  var dev = Math.round(Math.sqrt(Math.pow(cgX-PL/2,2)+Math.pow(cgY-PW/2,2)));
+  document.getElementById('cgXBar').style.width = (cgX/PL*100) + '%';
+  document.getElementById('cgXVal').textContent = cgX + 'mm';
+  document.getElementById('cgYBar').style.width = (cgY/PW*100) + '%';
+  document.getElementById('cgYVal').textContent = cgY + 'mm';
+  document.getElementById('warnCG').textContent = dev;
+  document.getElementById('stabilityScoreDisplay').textContent = stab + '点';
+  document.getElementById('stabilityScoreDisplay').style.color = stab >= 80 ? '#27ae60' : stab >= 60 ? '#e67e22' : '#e74c3c';
+
+  /* ── Explanation ── */
+  document.getElementById('explanationText').textContent =
+    '配置ケース数: ' + sm.placed_cases + '/' + sm.total_cases + '。' +
+    '体積効率: ' + sm.efficiency_pct + '%。' +
+    (unplaced.length > 0 ? '未配置: ' + unplaced.map(function(u){return u.name;}).join(', ') + '。' : '') +
+    (data.warnings || []).join(' ');
+
+  /* ── Influence ── */
+  var inf = supplyMode === 'free' ? 3 : supplyMode === 'fifo' ? 18 : 8;
+  document.getElementById('influenceBar').style.width = inf + '%';
+  document.getElementById('influenceDesc').textContent =
+    supplyMode === 'free'   ? '順番自由モードのため、供給制約による効率低下はほぼありません。' :
+    supplyMode === 'fifo'   ? 'FIFO制約により推定 ' + inf + '% の効率低下が発生しています。' :
+    'バッファモードにより制約の影響を緩和しています。推定効率低下: ' + inf + '%';
+
+  /* ── Reproducibility ── */
+  updateReproScore(calcReproScore());
+
+  /* ── Constraint Hits ── */
+  renderConstraintHits(data.constraint_hits || {});
+
+  /* ── Score Breakdowns ── */
+  renderScoreBreakdowns(placements);
+
+  /* ── Unplaced list ── */
+  renderUnplaced(unplaced);
+
+  /* ── Visualizations ── */
+  drawTopView(cases, placements);
+  drawSideView(placements);
+  drawIsoView(cases, placements);
+  drawLegend(cases);
+
+  document.getElementById('emptyResult').style.display   = 'none';
+  document.getElementById('resultContent').style.display = 'block';
+  showToast('計算が完了しました');
+}
+
+/* ── CONSTRAINT HITS RENDERER ── */
+function renderConstraintHits(hits) {
+  var section = document.getElementById('constraintHitsSection');
+  var grid    = document.getElementById('constraintHitsGrid');
+  var totalRow = document.getElementById('constraintTotalRow');
+  if (!section || !grid) return;
+
+  var totalChecked = hits['総チェック数'] || 0;
+  var labels = ['範囲外','衝突','支持率不足','fragile違反','重量物違反','積段数超過','温度帯違反','総重量超過','上面荷重超過'];
+  var maxHit = Math.max(1, Math.max.apply(null, labels.map(function(l){ return hits[l] || 0; })));
+
+  grid.innerHTML = '';
+  labels.forEach(function(label) {
+    var count = hits[label] || 0;
+    var pct   = Math.round(count / maxHit * 100);
+    var card  = document.createElement('div');
+    card.className = 'constraint-hit-card' + (count > 0 ? ' has-hits' : '');
+    card.innerHTML =
+      '<div class="constraint-hit-label">' + escHtml(label) + '</div>' +
+      '<div class="constraint-hit-count">' + count + '</div>' +
+      '<div class="constraint-hit-bar-wrap">' +
+        '<div class="constraint-hit-bar" style="width:' + pct + '%"></div>' +
+      '</div>';
+    grid.appendChild(card);
+  });
+
+  var totalHits = labels.reduce(function(s, l){ return s + (hits[l] || 0); }, 0);
+  totalRow.textContent =
+    '総チェック数: ' + totalChecked + ' 回 ／ 合計棄却数: ' + totalHits + ' 回' +
+    (totalChecked > 0 ? '（棄却率: ' + (totalHits / totalChecked * 100).toFixed(1) + '%）' : '');
+
+  section.style.display = totalChecked > 0 ? 'block' : 'none';
+}
+
+/* ── SCORE BREAKDOWN RENDERER ── */
+function renderScoreBreakdowns(placements) {
+  var section = document.getElementById('scoreBreakdownSection');
+  var tbody   = document.getElementById('scoreBreakdownBody');
+  if (!section || !tbody) return;
+
+  var withBreakdown = placements.filter(function(p){ return p.score_breakdown; });
+  if (withBreakdown.length === 0) { section.style.display = 'none'; return; }
+
+  tbody.innerHTML = '';
+  withBreakdown.slice(0, 20).forEach(function(p, i) {
+    var bd = p.score_breakdown;
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + (i+1) + '</td>' +
+      '<td>' + escHtml(p.sku_id) + '</td>' +
+      '<td>' + escHtml(p.name) + '</td>' +
+      tdScore(bd.support_score, '#3498db') +
+      tdScore(bd.center_score,  '#2ecc71') +
+      tdScore(bd.height_score,  '#e67e22') +
+      tdScore(bd.void_score,    '#9b59b6') +
+      tdScore(bd.group_score,   '#1abc9c') +
+      '<td><strong>' + (bd.total_score * 100).toFixed(1) + '</strong></td>';
+    tbody.appendChild(tr);
+  });
+  section.style.display = 'block';
+}
+
+function tdScore(val, color) {
+  var pct = Math.round((val || 0) * 100);
+  return '<td>' + pct + '%' +
+    '<span class="score-bar-mini" style="width:' + Math.max(2, pct/2) + 'px;background:' + color + ';"></span>' +
+    '</td>';
+}
+
+/* ── UNPLACED LIST RENDERER ── */
+function renderUnplaced(unplaced) {
+  var card = document.getElementById('unplacedCard');
+  if (!card) return;
+  if (!unplaced || unplaced.length === 0) {
+    card.innerHTML =
+      '<div style="display:flex;align-items:center;gap:10px;color:#27ae60;font-weight:700;font-size:14px;">' +
+      '<span style="font-size:20px;">✅</span> 全ケース配置完了 — 未配置ケースはありません</div>';
+    return;
+  }
+  var rows = unplaced.map(function(u) {
+    return '<tr><td>' + escHtml(u.sku_id) + '</td><td>' + escHtml(u.name) + '</td>' +
+      '<td style="color:#e74c3c;">' + escHtml(u.reason) + '</td></tr>';
+  }).join('');
+  card.innerHTML =
+    '<div style="color:#e74c3c;font-weight:700;margin-bottom:10px;">⚠ 未配置ケース: ' + unplaced.length + '件</div>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+    '<thead><tr>' +
+      '<th style="text-align:left;padding:6px 8px;background:#fef0f0;border-bottom:1px solid #f5c6c6;">品番</th>' +
+      '<th style="text-align:left;padding:6px 8px;background:#fef0f0;border-bottom:1px solid #f5c6c6;">品名</th>' +
+      '<th style="text-align:left;padding:6px 8px;background:#fef0f0;border-bottom:1px solid #f5c6c6;">未配置理由</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 /* ── DRAG & DROP (priority list) ── */

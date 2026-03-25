@@ -23,6 +23,9 @@ class CaseItem:
     group: str = ""          # グループ/品種（同品種集約用）
     temperature: str = "normal"  # 温度帯: normal / chilled / frozen
     color: str = "#4A90D9"   # 可視化用カラー
+    max_top_load: float = 0.0        # 上面許容荷重 kg (0=制限なし)
+    no_flip: bool = False            # 天地無用フラグ（天地反転禁止）
+    support_ratio_required: float = 0.0  # 個別支持率下限 (0=グローバル設定使用)
 
 
 @dataclass
@@ -73,6 +76,56 @@ class ScoreConfig:
 
 
 @dataclass
+class ScoreBreakdown:
+    """配置スコア内訳（採用された配置の各指標値）"""
+    support_score: float = 0.0
+    center_score: float = 0.0
+    height_score: float = 0.0
+    void_score: float = 0.0
+    group_score: float = 0.0
+    total_score: float = 0.0
+
+    def to_dict(self) -> Dict[str, float]:
+        return {
+            "support_score": round(self.support_score, 3),
+            "center_score":  round(self.center_score,  3),
+            "height_score":  round(self.height_score,  3),
+            "void_score":    round(self.void_score,    3),
+            "group_score":   round(self.group_score,   3),
+            "total_score":   round(self.total_score,   3),
+        }
+
+
+@dataclass
+class ConstraintHitStats:
+    """制約ヒット集計（候補配置の棄却理由カウンタ）"""
+    pallet_bounds: int = 0   # パレット範囲外
+    collision: int = 0       # 衝突
+    support_ratio: int = 0   # 支持率不足
+    fragile: int = 0         # fragile違反
+    heavy_bottom: int = 0    # 重量物違反
+    max_stack: int = 0       # 積段数超過
+    temperature: int = 0     # 温度帯違反
+    total_weight: int = 0    # 総重量超過
+    max_top_load: int = 0    # 上面荷重超過
+    total_checked: int = 0   # 全候補チェック数（回転×位置の組み合わせ）
+
+    def to_dict(self) -> Dict[str, int]:
+        return {
+            "範囲外":       self.pallet_bounds,
+            "衝突":         self.collision,
+            "支持率不足":   self.support_ratio,
+            "fragile違反":  self.fragile,
+            "重量物違反":   self.heavy_bottom,
+            "積段数超過":   self.max_stack,
+            "温度帯違反":   self.temperature,
+            "総重量超過":   self.total_weight,
+            "上面荷重超過": self.max_top_load,
+            "総チェック数": self.total_checked,
+        }
+
+
+@dataclass
 class Placement:
     """配置済みケース1個の情報"""
     sku_id: str
@@ -89,6 +142,9 @@ class Placement:
     fragile: bool = False
     color: str = "#4A90D9"
     sequence: int = 0  # 配置順序
+    temperature: str = "normal"  # 温度帯
+    max_top_load: float = 0.0    # 上面許容荷重 (CaseItemから引き継ぎ)
+    score_breakdown: Optional[ScoreBreakdown] = None  # スコア内訳
 
     @property
     def x2(self) -> int:
@@ -131,6 +187,7 @@ class PackResult:
     applied_rules: List[str] = field(default_factory=list)
     exec_mode: str = "real"
     supply_mode: str = "free"
+    constraint_hits: ConstraintHitStats = field(default_factory=ConstraintHitStats)
 
 
 @dataclass
