@@ -18,9 +18,11 @@ def check_pallet_bounds(
     """パレット範囲内チェック（許容はみ出し考慮）"""
     max_x = pallet.length * (1 + overhang_limit)
     max_y = pallet.width * (1 + overhang_limit)
+    min_x = -int(pallet.length * overhang_limit)
+    min_y = -int(pallet.width * overhang_limit)
 
-    if x < 0 or y < 0 or z < 0:
-        return False, "座標が負値"
+    if x < min_x or y < min_y or z < 0:
+        return False, "座標が範囲外"
     if x + case_l > max_x:
         return False, f"X方向超過: {x + case_l:.0f} > {max_x:.0f}"
     if y + case_w > max_y:
@@ -48,7 +50,8 @@ def check_support_ratio(
     x: int, y: int, z: int,
     case_l: int, case_w: int,
     placements: List[Placement],
-    min_ratio: float = 0.7
+    min_ratio: float = 0.7,
+    height_tolerance: int = 0
 ) -> CheckResult:
     """底面支持率チェック（Z=0の場合はパレット台で100%支持）"""
     if z == 0:
@@ -58,7 +61,7 @@ def check_support_ratio(
     supported_area = 0
 
     for p in placements:
-        if p.z2 == z:  # ちょうど直下にある配置物
+        if p.z2 <= z and z - p.z2 <= height_tolerance:  # 許容高さ差以内の直下
             ox = max(0, min(x + case_l, p.x2) - max(x, p.x))
             oy = max(0, min(y + case_w, p.y2) - max(y, p.y))
             supported_area += ox * oy
@@ -260,7 +263,7 @@ def run_all_checks(
         ("collision", check_collision(
             x, y, z, case_l, case_w, case_h, placements)),
         ("support_ratio", check_support_ratio(
-            x, y, z, case_l, case_w, placements, support_min)),
+            x, y, z, case_l, case_w, placements, support_min, rules.height_tolerance)),
         ("total_weight", check_total_weight(
             case_item, placements, pallet)),
         ("max_stack", check_max_stack(

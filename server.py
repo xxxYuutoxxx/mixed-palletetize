@@ -92,6 +92,7 @@ def api_pack(req: PackRequest):
         temp_separate=bool(r.get("temp_separate", False)),
         overhang_limit=float(r.get("overhang_limit", 0.0)),
         support_ratio_min=float(r.get("support_ratio_min", 0.7)),
+        height_tolerance=int(r.get("height_tolerance", 0)),
     )
 
     sc = req.scoring

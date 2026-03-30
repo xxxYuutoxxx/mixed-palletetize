@@ -60,6 +60,7 @@ class RuleConfig:
     temp_separate: bool = False    # 温度帯分離
     overhang_limit: float = 0.0    # 許容はみ出し率 0.0〜0.3
     support_ratio_min: float = 0.7 # 最小支持率
+    height_tolerance: int = 0      # 同一平面とみなす高さ差許容値 mm (0=完全一致)
     priority_order: List[str] = field(default_factory=lambda: [
         "heavy_bottom", "fragile_top", "same_group"
     ])
@@ -144,6 +145,7 @@ class Placement:
     sequence: int = 0  # 配置順序
     temperature: str = "normal"  # 温度帯
     max_top_load: float = 0.0    # 上面許容荷重 (CaseItemから引き継ぎ)
+    pallet_id: int = 1           # パレット番号 (1始まり)
     score_breakdown: Optional[ScoreBreakdown] = None  # スコア内訳
 
     @property

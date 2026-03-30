@@ -67,7 +67,19 @@
       "Bash(git:*)",
       "Skill(update-config)",
       "Bash(python -c \"from packer import pack, pack_single_pallet_beam; print\\(''import OK''\\)\")",
-      "Bash(python -c \"from server import app; print\\(''server import OK''\\)\")"
+      "Bash(python -c \"from server import app; print\\(''server import OK''\\)\")",
+      "Bash(wc -l C:/Users/onlyg/documents/claude/palletize/data/*.csv)",
+      "Bash(pip show:*)",
+      "Bash(curl -s http://127.0.0.1:8000)",
+      "Bash(curl -s -X POST http://127.0.0.1:8000/api/pack -H \"Content-Type: application/json\" -d \"{\"\"cases\"\":[{\"\"sku_id\"\":\"\"A\"\",\"\"name\"\":\"\"A\"\",\"\"length\"\":520,\"\"width\"\":365,\"\"height\"\":400,\"\"weight\"\":9.3,\"\"quantity\"\":1,\"\"color\"\":\"\"#ff0000\"\"},{\"\"sku_id\"\":\"\"B\"\",\"\"name\"\":\"\"B\"\",\"\"length\"\":530,\"\"width\"\":340,\"\"height\"\":390,\"\"weight\"\":6.4,\"\"quantity\"\":6,\"\"color\"\":\"\"#00ff00\"\"},{\"\"sku_id\"\":\"\"C\"\",\"\"name\"\":\"\"C\"\",\"\"length\"\":540,\"\"width\"\":275,\"\"height\"\":420,\"\"weight\"\":5.0,\"\"quantity\"\":5,\"\"color\"\":\"\"#0000ff\"\"}],\"\"pallet\"\":{\"\"length\"\":1100,\"\"width\"\":1100,\"\"effective_height\"\":1500,\"\"max_weight\"\":1000}}\")",
+      "Bash(python server.py)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill:*)",
+      "Bash(cmd /c \"taskkill /PID 37792 /F\")",
+      "Bash(curl -s http://127.0.0.1:8000/api/pack -X POST -H \"Content-Type: application/json\" -d \"{\"\"cases\"\":[{\"\"sku_id\"\":\"\"A\"\",\"\"name\"\":\"\"A\"\",\"\"length\"\":520,\"\"width\"\":365,\"\"height\"\":400,\"\"weight\"\":9.3,\"\"quantity\"\":1,\"\"color\"\":\"\"#ff0000\"\"}],\"\"pallet\"\":{}}\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''pallet_id:'''', d[''''placements''''][0].get\\(''''pallet_id'''',''''MISSING''''\\)\\)\")",
+      "Bash(cmd.exe /c \"taskkill /PID 37792 /F\" 2>&1)",
+      "Bash(powershell -Command \"Stop-Process -Id 37792 -Force\" 2>&1)"
     ],
     "defaultMode": "acceptEdits"
   }

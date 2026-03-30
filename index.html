@@ -618,14 +618,14 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
           <div class="field-group">
             <div class="field-label">最大積付高さ <span>(mm)</span></div>
             <div class="field-input-wrap">
-              <input type="number" id="maxHeight" value="1650" min="500" max="3000" step="10">
+              <input type="number" id="maxHeight" value="1900" min="500" max="3000" step="10">
               <span class="field-unit">mm</span>
             </div>
           </div>
           <div class="field-group">
             <div class="field-label">有効積付高さ <span>(自動計算)</span></div>
             <div class="field-input-wrap">
-              <input type="number" id="effHeight" value="1500" min="100" max="3000" step="10">
+              <input type="number" id="effHeight" value="1750" min="100" max="3000" step="10">
               <span class="field-unit">mm</span>
             </div>
             <div class="hint-text">最大積付高さ − パレット高さ</div>
@@ -633,7 +633,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
           <div class="field-group">
             <div class="field-label">オーバーハング許容値 <span>(mm)</span></div>
             <div class="field-input-wrap">
-              <input type="number" value="0" min="0" max="50" step="5">
+              <input type="number" id="overhangLimit" value="25" min="0" max="500" step="5">
               <span class="field-unit">mm</span>
             </div>
           </div>
@@ -651,12 +651,12 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
         <div class="supply-section">
           <div class="supply-section-title">供給モード選択</div>
           <div class="mode-cards">
-            <div class="mode-card selected" data-mode="free" onclick="selectSupplyMode('free')">
+            <div class="mode-card" data-mode="free" onclick="selectSupplyMode('free')">
               <div class="mode-card-icon">🔀</div>
               <div class="mode-card-title">順番自由</div>
               <div class="mode-card-desc">投入順を自由に最適化</div>
             </div>
-            <div class="mode-card" data-mode="fifo" onclick="selectSupplyMode('fifo')">
+            <div class="mode-card selected" data-mode="fifo" onclick="selectSupplyMode('fifo')">
               <div class="mode-card-icon">➡</div>
               <div class="mode-card-title">FIFO制約あり</div>
               <div class="mode-card-desc">上流からの流れ順を維持</div>
@@ -693,7 +693,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
               <span class="supply-field-label" style="padding-top:2px;">供給順決定主体</span>
               <div class="radio-group">
                 <label class="radio-item">
-                  <input type="radio" name="supplyOwner" value="upstream">
+                  <input type="radio" name="supplyOwner" value="upstream" checked>
                   <div>
                     <div style="font-size:12px;font-weight:600;color:#1a3a5c;">上流固定</div>
                     <div class="radio-item-desc">上流システムの順番を変更不可</div>
@@ -707,7 +707,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
                   </div>
                 </label>
                 <label class="radio-item">
-                  <input type="radio" name="supplyOwner" value="system" checked>
+                  <input type="radio" name="supplyOwner" value="system">
                   <div>
                     <div style="font-size:12px;font-weight:600;color:#1a3a5c;">本システム最適化</div>
                     <div class="radio-item-desc">本システムが供給順を最適化</div>
@@ -829,7 +829,10 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
               <label class="constraint-item"><input type="checkbox" id="cbCenterPrio"   class="constraint-chk" checked onchange="checkConflicts()"> パレット中心寄せ優先</label>
               <label class="constraint-item"><input type="checkbox" id="cbOuterPrio"    class="constraint-chk"        onchange="checkConflicts()"> 外周優先配置</label>
               <label class="constraint-item"><input type="checkbox" id="cbStackPriority" class="constraint-chk"       onchange="checkConflicts()"> 段積み優先（隙間充填より段を優先）</label>
-              <label class="constraint-item"><input type="checkbox" id="cbNoOverhang"   class="constraint-chk" checked onchange="checkConflicts()"> オーバーハング禁止</label>
+              <label class="constraint-item"><input type="checkbox" id="cbNoOverhang"   class="constraint-chk"  onchange="checkConflicts()"> オーバーハング禁止</label>
+              <label class="constraint-item">
+                同一平面とみなす高さ差許容値: <input type="number" id="heightTolerance" min="0" max="100" step="1" value="0" style="width:65px;"> mm
+              </label>
               <label class="constraint-item"><input type="checkbox" id="cbTempSeparate" class="constraint-chk"        onchange="checkConflicts()"> 温度帯混載禁止</label>
             </div>
           </div>
@@ -899,8 +902,8 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
           <label>解探索モード</label>
           <select id="searchModeSelect">
             <option value="1">高速（貪欲法）</option>
-            <option value="3" selected>標準（ビームサーチ width=3）</option>
-            <option value="5">高精度（ビームサーチ width=5）</option>
+            <option value="3">標準（ビームサーチ width=3）</option>
+            <option value="5" selected>高精度（ビームサーチ width=5）</option>
           </select>
           <div class="hint-text">幅が大きいほど精度UP・計算時間増</div>
         </div>
@@ -1262,7 +1265,7 @@ const initialData = [
 
 /* ── STATE ── */
 let rows = [], rowId = 0;
-let supplyMode = 'free';
+let supplyMode = 'fifo';
 let currentPreset = 'standard';
 let execMode = 'ideal';
 
@@ -1320,6 +1323,7 @@ function toggleConflictPanel() {
   document.getElementById('conflictList').style.display = conflictPanelOpen ? 'flex' : 'none';
   document.getElementById('conflictToggle').textContent = conflictPanelOpen ? '▲' : '▼';
 }
+
 
 function checkConflicts() {
   var conflicts = [];
@@ -1664,7 +1668,9 @@ function runCalc() {
       outer_priority: !!(document.getElementById('cbOuterPrio')     || {}).checked,
       stack_priority: !!(document.getElementById('cbStackPriority') || {}).checked,
       no_overhang:    !!(document.getElementById('cbNoOverhang')    || {}).checked,
-      temp_separate:  !!(document.getElementById('cbTempSeparate')  || {}).checked
+      overhang_limit: (document.getElementById('cbNoOverhang') || {}).checked ? 0.0 : (parseFloat((document.getElementById('overhangLimit') || {value:'25'}).value) || 25) / (parseInt((document.getElementById('palletL') || {value:'1100'}).value) || 1100),
+      temp_separate:  !!(document.getElementById('cbTempSeparate')  || {}).checked,
+      height_tolerance: parseInt((document.getElementById('heightTolerance') || {value:'0'}).value) || 0
     },
     scoring: {
       w_support: parseInt((document.getElementById('weight_stability')  || {value:'50'}).value) || 50,
@@ -1722,7 +1728,7 @@ function handleImportFile(input) {
 }
 
 function parseImportData(text, fmt) {
-  var lines = text.split(/\r?\n/).filter(function(l) { return l.trim(); });
+  var lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(function(l) { return l.trim(); });
   if (lines.length < 2) { showToast('データが空です', 'warn'); return; }
 
   // ヘッダ行を解析（英語・日本語どちらも対応）
@@ -1777,32 +1783,25 @@ function parseImportData(text, fmt) {
   // テーブルをクリアして行を追加
   var tbody = document.getElementById('caseBody');
   tbody.innerHTML = '';
-  rowCount = 0;
   rows.forEach(function(r) {
-    addRow();
-    var idx = rowCount - 1;
-    var tr = tbody.rows[idx];
-    if (!tr) return;
-    tr.querySelector('.inp-id').value   = r.id;
-    tr.querySelector('.inp-name').value = r.name;
-    tr.querySelector('.inp-l').value    = r.l;
-    tr.querySelector('.inp-w').value    = r.w;
-    tr.querySelector('.inp-h').value    = r.h;
-    tr.querySelector('.inp-wt').value   = r.wt;
-    tr.querySelector('.inp-qty').value  = r.qty;
-    var grpEl = tr.querySelector('.inp-grp');
-    if (grpEl) grpEl.value = r.group;
+    addRow(r);
+    var rid = rowId;
+    var dtr = document.getElementById('detail_' + rid);
+    if (!dtr) return;
     // 詳細フィールドに反映
-    var fragCb   = tr.querySelector('[data-key="fragile"]');
-    var noflipCb = tr.querySelector('[data-key="no_flip"]');
-    var mtlEl    = tr.querySelector('[data-key="max_top_load"]');
-    var tempEl   = tr.querySelector('[data-key="temperature"]');
+    var fragCb   = dtr.querySelector('.inp-fragile');
+    var noflipCb = dtr.querySelector('.inp-topdown');
+    var mtlEl    = dtr.querySelector('.inp-topload');
+    var tempEl   = dtr.querySelector('.inp-temp');
     if (fragCb)   fragCb.checked   = r.fragile;
     if (noflipCb) noflipCb.checked = r.no_flip;
     if (mtlEl)    mtlEl.value      = r.max_top_load;
-    if (tempEl)   tempEl.value     = r.temperature;
+    if (tempEl) {
+      var tempMap = {'normal':'常温','chilled':'冷蔵','frozen':'冷凍'};
+      tempEl.value = tempMap[r.temperature] || '常温';
+    }
   });
-  updateCaseCount();
+  updateCount();
   showToast(rows.length + '件のケースを読み込みました');
 }
 
@@ -1996,13 +1995,15 @@ function drawIsoView(cases, placements) {
   var scene = new THREE.Scene();
 
   /* カメラ */
-  var camera = new THREE.PerspectiveCamera(45, W / H, 1, 20000);
-  camera.position.set(PL * 1.8, -PW * 0.8, effH * 1.4);
+  var palletCount3d = (lastResult && lastResult.summary ? lastResult.summary.pallet_count : 1) || 1;
+  var totalWidth3d = palletCount3d * PL + (palletCount3d - 1) * 200;
+  var camera = new THREE.PerspectiveCamera(45, W / H, 1, 50000);
+  camera.position.set(totalWidth3d / 2, -PW * 1.2, effH * 1.8);
   camera.up.set(0, 0, 1);
 
   /* OrbitControls */
   var controls = new THREE.OrbitControls(camera, canvas);
-  controls.target.set(PL / 2, PW / 2, effH / 4);
+  controls.target.set(totalWidth3d / 2, PW / 2, effH / 4);
   controls.enableDamping = true;
   controls.dampingFactor = 0.1;
   controls.update();
@@ -2013,25 +2014,39 @@ function drawIsoView(cases, placements) {
   dLight.position.set(PL * 2, -PW, effH * 3);
   scene.add(dLight);
 
-  /* パレット台 */
-  var palGeo = new THREE.BoxGeometry(PL, PW, 140);
-  var palMat = new THREE.MeshLambertMaterial({ color: 0xc8a96e });
-  var palMesh = new THREE.Mesh(palGeo, palMat);
-  palMesh.position.set(PL / 2, PW / 2, -70);
-  scene.add(palMesh);
-  var palEdges = new THREE.EdgesGeometry(palGeo);
-  var palLine = new THREE.LineSegments(palEdges, new THREE.LineBasicMaterial({ color: 0x8b6914 }));
-  palLine.position.copy(palMesh.position);
-  scene.add(palLine);
+  /* パレット番号ごとのオフセット (X方向にパレット幅+200mmずつずらす) */
+  var palletGap = 200;
+  var palletIds = [];
+  placements.forEach(function(p) {
+    var pid = p.pallet_id || 1;
+    if (palletIds.indexOf(pid) === -1) palletIds.push(pid);
+  });
+  palletIds.sort(function(a,b){return a-b;});
+
+  /* パレット台 (パレット枚数分) */
+  palletIds.forEach(function(pid) {
+    var offsetX = (pid - 1) * (PL + palletGap);
+    var palGeo = new THREE.BoxGeometry(PL, PW, 140);
+    var palMat = new THREE.MeshLambertMaterial({ color: 0xc8a96e });
+    var palMesh = new THREE.Mesh(palGeo, palMat);
+    palMesh.position.set(offsetX + PL / 2, PW / 2, -70);
+    scene.add(palMesh);
+    var palEdges = new THREE.EdgesGeometry(palGeo);
+    var palLine = new THREE.LineSegments(palEdges, new THREE.LineBasicMaterial({ color: 0x8b6914 }));
+    palLine.position.copy(palMesh.position);
+    scene.add(palLine);
+  });
 
   /* ケース */
   placements.forEach(function(p) {
+    var pid = p.pallet_id || 1;
+    var offsetX = (pid - 1) * (PL + palletGap);
     var gap = 2;
     var geo = new THREE.BoxGeometry(p.length - gap, p.width - gap, p.height - gap);
     var col = parseInt(p.color.replace('#', '0x'));
     var mat = new THREE.MeshLambertMaterial({ color: col });
     var mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(p.x + p.length / 2, p.y + p.width / 2, p.z + p.height / 2);
+    mesh.position.set(offsetX + p.x + p.length / 2, p.y + p.width / 2, p.z + p.height / 2);
     scene.add(mesh);
 
     var edges = new THREE.EdgesGeometry(geo);
@@ -2566,7 +2581,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   updateWeightBar();
-  selectSupplyMode('free');
+  selectSupplyMode('fifo');
   updateSpecBar();
   checkConflicts();
 

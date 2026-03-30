@@ -70,6 +70,7 @@ def parse_input(data: Dict[str, Any]):
         temp_separate=bool(r.get("temp_separate", False)),
         overhang_limit=float(r.get("overhang_limit", 0.0)),
         support_ratio_min=float(r.get("support_ratio_min", 0.7)),
+        height_tolerance=int(r.get("height_tolerance", 0)),
         priority_order=r.get("priority_order", ["heavy_bottom", "fragile_top"]),
     )
 
@@ -110,6 +111,7 @@ def result_to_dict(result: PackResult, pallet: PalletConfig) -> Dict[str, Any]:
             "fragile":  p.fragile,
             "color":    p.color,
             "sequence": p.sequence,
+            "pallet_id": p.pallet_id,
         }
         if p.score_breakdown is not None:
             entry["score_breakdown"] = p.score_breakdown.to_dict()

@@ -116,7 +116,7 @@ def pack_single_pallet(
             break
 
         queue_idx, case_item = result
-        candidates = generate_candidates(placements, pallet)
+        candidates = generate_candidates(placements, pallet, rules.overhang_limit)
         if not candidates:
             candidates = [CandidatePosition(0, 0, 0, "origin")]
 
@@ -209,7 +209,7 @@ def _get_valid_placements_for_item(
     exec_mode: str,
 ) -> List[Tuple[float, Placement]]:
     """有効な配置候補を (score, Placement) リストで返す (降順ソート済み)"""
-    candidates = generate_candidates(placements, pallet)
+    candidates = generate_candidates(placements, pallet, rules.overhang_limit)
     if not candidates:
         candidates = [CandidatePosition(0, 0, 0, "origin")]
 
@@ -363,6 +363,8 @@ def pack(
                 })
             break
 
+        for p in placements:
+            p.pallet_id = pallet_count
         all_placements.extend(placements)
         queue = remaining
 

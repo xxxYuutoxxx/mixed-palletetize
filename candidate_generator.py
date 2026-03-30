@@ -9,7 +9,8 @@ from models import CandidatePosition, Placement, PalletConfig
 
 def generate_candidates(
     placements: List[Placement],
-    pallet: PalletConfig
+    pallet: PalletConfig,
+    overhang_limit: float = 0.0
 ) -> List[CandidatePosition]:
     """
     既存配置リストから次に試すべき候補位置を全列挙する。
@@ -23,8 +24,14 @@ def generate_candidates(
             seen.add((x, y, z))
             candidates.append(CandidatePosition(x, y, z, source))
 
-    # 原点は常に候補
+    # 原点は常に候補（オーバーハング時は負方向の隅も追加）
     add(0, 0, 0, "origin")
+    if overhang_limit > 0:
+        oh_x = int(pallet.length * overhang_limit)
+        oh_y = int(pallet.width * overhang_limit)
+        add(-oh_x, -oh_y, 0, "origin")
+        add(-oh_x,      0, 0, "origin")
+        add(     0, -oh_y, 0, "origin")
 
     for p in placements:
         # 右隣 (X方向)
@@ -47,9 +54,15 @@ def generate_candidates(
         add(p.x, p.y2, p.z2, "top")
 
     # パレット範囲をはみ出す候補を除去（配置時に詳細チェックするが事前フィルタ）
+    max_x = pallet.length * (1 + overhang_limit)
+    max_y = pallet.width * (1 + overhang_limit)
+    min_x = -int(pallet.length * overhang_limit)
+    min_y = -int(pallet.width * overhang_limit)
     candidates = [
         c for c in candidates
-        if c.x < pallet.length and c.y < pallet.width and c.z < pallet.effective_height
+        if c.x >= min_x and c.y >= min_y
+        and c.x < max_x and c.y < max_y
+        and c.z < pallet.effective_height
     ]
 
     # Z昇順 → Y昇順 → X昇順でソート（下から左奥から埋める基本方針）
