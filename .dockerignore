@@ -1,0 +1,18 @@
+# Git
+.git
+.gitignore
+
+# Python キャッシュ
+__pycache__/
+*.pyc
+*.pyo
+
+# データファイル（必要なら除外を外す）
+data/
+
+# Excel出力ファイル
+*.xlsx
+
+# 開発用
+.claude/
+*.md

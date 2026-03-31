@@ -1,11 +1,6 @@
-# 混載パレタイズ積付計算システム Phase 1 依存パッケージ
-# Python 3.7+ 対応
-
-# コアアルゴリズム (標準ライブラリのみ — 追加インストール不要)
-# dataclasses, json, argparse, sys, os, math, typing
-
-# 可視化 (任意 — なくてもアルゴリズムは動作する)
-matplotlib>=3.3.0
-
-# 開発・テスト (任意)
-pytest>=6.0.0
+fastapi>=0.115.0
+uvicorn>=0.30.0
+openpyxl>=3.1.0
+matplotlib>=3.7.0
+numpy>=1.24.0
+python-multipart>=0.0.9
