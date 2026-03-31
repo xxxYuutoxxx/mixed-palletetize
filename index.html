@@ -492,12 +492,12 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
     <div class="spec-sep"></div>
     <div class="spec-item">
       <span class="spec-label">最大積付高さ</span>
-      <span class="spec-val" id="specMaxH">1650 mm</span>
+      <span class="spec-val" id="specMaxH">1800 mm</span>
     </div>
     <div class="spec-sep"></div>
     <div class="spec-item">
       <span class="spec-label">有効積付高さ</span>
-      <span class="spec-val" id="specEffH">1500 mm</span>
+      <span class="spec-val" id="specEffH">1650 mm</span>
     </div>
     <div class="spec-sep"></div>
     <div class="spec-item">
@@ -511,11 +511,11 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
 <div class="exec-mode-bar">
   <span class="exec-mode-label">動作モード</span>
   <div class="exec-mode-btns">
-    <button class="exec-mode-btn ideal active" data-execmode="ideal" onclick="setExecMode('ideal')">🌟 理想最適モード</button>
-    <button class="exec-mode-btn real"         data-execmode="real"  onclick="setExecMode('real')">🏭 現実制約モード</button>
+    <button class="exec-mode-btn ideal"        data-execmode="ideal" onclick="setExecMode('ideal')">🌟 理想最適モード</button>
+    <button class="exec-mode-btn real active"  data-execmode="real"  onclick="setExecMode('real')">🏭 現実制約モード</button>
     <button class="exec-mode-btn robot"        data-execmode="robot" onclick="setExecMode('robot')">🤖 ロボ実行モード</button>
   </div>
-  <span class="exec-mode-desc" id="execModeDesc">供給順・積付順を自由に最適化。理論上の最大積載率を追求します。実運用制約は考慮しません。</span>
+  <span class="exec-mode-desc" id="execModeDesc">FIFO・バッファ等の現場供給制約を反映した実運用想定モード。理想解との差分を確認できます。</span>
 </div>
 
 <!-- ══ MAIN ══ -->
@@ -618,14 +618,14 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
           <div class="field-group">
             <div class="field-label">最大積付高さ <span>(mm)</span></div>
             <div class="field-input-wrap">
-              <input type="number" id="maxHeight" value="1900" min="500" max="3000" step="10">
+              <input type="number" id="maxHeight" value="1800" min="500" max="3000" step="10">
               <span class="field-unit">mm</span>
             </div>
           </div>
           <div class="field-group">
             <div class="field-label">有効積付高さ <span>(自動計算)</span></div>
             <div class="field-input-wrap">
-              <input type="number" id="effHeight" value="1750" min="100" max="3000" step="10">
+              <input type="number" id="effHeight" value="1650" min="100" max="3000" step="10">
               <span class="field-unit">mm</span>
             </div>
             <div class="hint-text">最大積付高さ − パレット高さ</div>
@@ -750,7 +750,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
               <select>
                 <option>長辺をパレット長辺に合わせる</option>
                 <option>短辺優先</option>
-                <option>効率最大化（自動）</option>
+                <option selected>効率最大化（自動）</option>
               </select>
             </div>
           </div>
@@ -823,7 +823,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
           <div>
             <div class="sub-section-title">チェックボックス制約一覧</div>
             <div class="constraint-check-list">
-              <label class="constraint-item"><input type="checkbox" id="cbFragileTop"   class="constraint-chk" checked onchange="checkConflicts()"> Fragile品の上載禁止</label>
+              <label class="constraint-item"><input type="checkbox" id="cbFragileTop"   class="constraint-chk" onchange="checkConflicts()"> Fragile品の上載禁止</label>
               <label class="constraint-item"><input type="checkbox" id="cbHeavyBottom"  class="constraint-chk" checked onchange="checkConflicts()"> 重い物を下段優先</label>
               <label class="constraint-item"><input type="checkbox" id="cbSameGroup"    class="constraint-chk"        onchange="checkConflicts()"> 同品種同一段優先</label>
               <label class="constraint-item"><input type="checkbox" id="cbCenterPrio"   class="constraint-chk" checked onchange="checkConflicts()"> パレット中心寄せ優先</label>
@@ -831,7 +831,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
               <label class="constraint-item"><input type="checkbox" id="cbStackPriority" class="constraint-chk"       onchange="checkConflicts()"> 段積み優先（隙間充填より段を優先）</label>
               <label class="constraint-item"><input type="checkbox" id="cbNoOverhang"   class="constraint-chk"  onchange="checkConflicts()"> オーバーハング禁止</label>
               <label class="constraint-item">
-                同一平面とみなす高さ差許容値: <input type="number" id="heightTolerance" min="0" max="100" step="1" value="0" style="width:65px;"> mm
+                同一平面とみなす高さ差許容値: <input type="number" id="heightTolerance" min="0" max="100" step="1" value="5" style="width:65px;"> mm
               </label>
               <label class="constraint-item"><input type="checkbox" id="cbTempSeparate" class="constraint-chk"        onchange="checkConflicts()"> 温度帯混載禁止</label>
             </div>
@@ -1031,6 +1031,36 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
           <div class="view-tab-panel" id="vtab2">
             <canvas id="isoView" width="480" height="320" style="display:block;margin:0 auto;border-radius:6px;"></canvas>
             <div style="font-size:10px;color:#a0b0c0;text-align:center;margin-top:4px;">マウス左ボタン:回転 / ホイール:ズーム / 右ボタン:パン</div>
+            <!-- アニメーションコントロール -->
+            <div id="animControls" style="display:none;margin-top:10px;background:#1a3a5c;border-radius:8px;padding:10px 14px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <span style="font-size:11px;font-weight:700;color:#7fc4fd;letter-spacing:0.05em;">積付アニメーション</span>
+                <span id="animStepLabel" style="font-size:12px;font-weight:700;color:#fff;font-family:'Courier New',monospace;">0 / 0 ケース</span>
+              </div>
+              <!-- プログレスバー -->
+              <div style="background:rgba(255,255,255,.15);border-radius:4px;height:5px;margin-bottom:10px;cursor:pointer;" id="animProgressBar" onclick="animSeekClick(event)">
+                <div id="animProgressFill" style="height:100%;background:#e67e22;border-radius:4px;width:0%;transition:width .1s;"></div>
+              </div>
+              <!-- ボタン行 -->
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <button class="btn" onclick="animReset()"
+                  style="background:#2c5f8a;color:#fff;font-size:16px;padding:5px 10px;min-width:36px;" title="最初へ">&#9646;&#9664;</button>
+                <button class="btn" onclick="animStepBack()"
+                  style="background:#2c5f8a;color:#fff;font-size:16px;padding:5px 10px;min-width:36px;" title="1つ戻る">&#9664;</button>
+                <button id="animPlayBtn" class="btn" onclick="animTogglePlay()"
+                  style="background:#e67e22;color:#fff;font-size:16px;padding:5px 14px;min-width:44px;" title="再生/一時停止">&#9654;</button>
+                <button class="btn" onclick="animStepFwd()"
+                  style="background:#2c5f8a;color:#fff;font-size:16px;padding:5px 10px;min-width:36px;" title="1つ進む">&#9654;&#9646;</button>
+                <button class="btn" onclick="animGoEnd()"
+                  style="background:#2c5f8a;color:#fff;font-size:16px;padding:5px 10px;min-width:36px;" title="最後へ">&#9654;&#9654;&#9646;</button>
+                <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+                  <span style="font-size:10px;color:#7fc4fd;">速度</span>
+                  <input id="animSpeed" type="range" min="1" max="10" value="4"
+                    style="width:80px;accent-color:#e67e22;" oninput="animUpdateSpeed()">
+                  <span id="animSpeedLabel" style="font-size:10px;color:#fff;font-family:monospace;min-width:28px;">x1.0</span>
+                </div>
+              </div>
+            </div>
           </div>
           <div style="margin-top:12px;">
             <div style="font-size:11px;font-weight:700;color:#5a7a96;margin-bottom:6px;">凡例</div>
@@ -1267,7 +1297,7 @@ const initialData = [
 let rows = [], rowId = 0;
 let supplyMode = 'fifo';
 let currentPreset = 'standard';
-let execMode = 'ideal';
+let execMode = 'real';
 
 /* ── PALLET GETTERS ── */
 function getPalletL() { return parseInt(document.getElementById('palletL').value)  || 1100; }
@@ -1974,11 +2004,78 @@ function drawSideView(placements) {
 }
 
 /* ── ISO VIEW (Three.js) ── */
-var _three = { renderer: null, animId: null };
+var _three = {
+  renderer: null, animId: null,
+  meshPairs: [],   // [{mesh, line}] sequence順
+  step: 0,         // 現在表示中のケース数
+  total: 0,
+  playing: false,
+  intervalId: null,
+  intervalMs: 500  // 再生間隔 ms
+};
+
+function _animSetVisible(n) {
+  _three.meshPairs.forEach(function(pair, i) {
+    var vis = i < n;
+    pair.mesh.visible = vis;
+    pair.line.visible = vis;
+  });
+  _three.step = n;
+  /* UI更新 */
+  var lbl = document.getElementById('animStepLabel');
+  var fill = document.getElementById('animProgressFill');
+  if (lbl) lbl.textContent = n + ' / ' + _three.total + ' ケース';
+  if (fill) fill.style.width = (_three.total > 0 ? (n / _three.total * 100) : 0) + '%';
+}
+
+function animTogglePlay() {
+  if (_three.playing) { animPause(); } else { animPlay(); }
+}
+function animPlay() {
+  if (_three.step >= _three.total) _animSetVisible(0); // 末尾なら先頭から
+  _three.playing = true;
+  document.getElementById('animPlayBtn').innerHTML = '&#9646;&#9646;'; // ⏸
+  _three.intervalId = setInterval(function() {
+    if (_three.step < _three.total) {
+      _animSetVisible(_three.step + 1);
+    } else {
+      animPause();
+    }
+  }, _three.intervalMs);
+}
+function animPause() {
+  _three.playing = false;
+  var btn = document.getElementById('animPlayBtn');
+  if (btn) btn.innerHTML = '&#9654;'; // ▶
+  if (_three.intervalId) { clearInterval(_three.intervalId); _three.intervalId = null; }
+}
+function animReset()    { animPause(); _animSetVisible(0); }
+function animGoEnd()    { animPause(); _animSetVisible(_three.total); }
+function animStepFwd()  { animPause(); if (_three.step < _three.total) _animSetVisible(_three.step + 1); }
+function animStepBack() { animPause(); if (_three.step > 0) _animSetVisible(_three.step - 1); }
+function animUpdateSpeed() {
+  var v = parseInt(document.getElementById('animSpeed').value); // 1-10
+  /* v=1 → 2000ms, v=4 → 500ms, v=10 → 80ms */
+  var ms = Math.round(2000 / (v * 0.5 + 0.5));
+  _three.intervalMs = ms;
+  var xLabel = (2000 / ms).toFixed(1);
+  document.getElementById('animSpeedLabel').textContent = 'x' + xLabel;
+  if (_three.playing) { animPause(); animPlay(); } // 再生中なら間隔を再設定
+}
+function animSeekClick(e) {
+  var bar = document.getElementById('animProgressBar');
+  var rect = bar.getBoundingClientRect();
+  var ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  var n = Math.round(ratio * _three.total);
+  animPause();
+  _animSetVisible(n);
+}
 
 function drawIsoView(cases, placements) {
-  if (_three.animId)    { cancelAnimationFrame(_three.animId); _three.animId = null; }
-  if (_three.renderer)  { _three.renderer.dispose(); _three.renderer = null; }
+  /* 前回のアニメーション停止 */
+  animPause();
+  if (_three.animId)   { cancelAnimationFrame(_three.animId); _three.animId = null; }
+  if (_three.renderer) { _three.renderer.dispose(); _three.renderer = null; }
 
   if (typeof THREE === 'undefined') return;
 
@@ -2014,7 +2111,7 @@ function drawIsoView(cases, placements) {
   dLight.position.set(PL * 2, -PW, effH * 3);
   scene.add(dLight);
 
-  /* パレット番号ごとのオフセット (X方向にパレット幅+200mmずつずらす) */
+  /* パレット台 */
   var palletGap = 200;
   var palletIds = [];
   placements.forEach(function(p) {
@@ -2023,7 +2120,6 @@ function drawIsoView(cases, placements) {
   });
   palletIds.sort(function(a,b){return a-b;});
 
-  /* パレット台 (パレット枚数分) */
   palletIds.forEach(function(pid) {
     var offsetX = (pid - 1) * (PL + palletGap);
     var palGeo = new THREE.BoxGeometry(PL, PW, 140);
@@ -2037,8 +2133,14 @@ function drawIsoView(cases, placements) {
     scene.add(palLine);
   });
 
-  /* ケース */
-  placements.forEach(function(p) {
+  /* ケース — sequence順にソートして meshPairs に格納 */
+  var sorted = placements.slice().sort(function(a, b) {
+    return (a.sequence || 0) - (b.sequence || 0);
+  });
+  _three.meshPairs = [];
+  _three.total = sorted.length;
+
+  sorted.forEach(function(p) {
     var pid = p.pallet_id || 1;
     var offsetX = (pid - 1) * (PL + palletGap);
     var gap = 2;
@@ -2047,14 +2149,23 @@ function drawIsoView(cases, placements) {
     var mat = new THREE.MeshLambertMaterial({ color: col });
     var mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(offsetX + p.x + p.length / 2, p.y + p.width / 2, p.z + p.height / 2);
+    mesh.visible = true;
     scene.add(mesh);
 
     var edges = new THREE.EdgesGeometry(geo);
     var line = new THREE.LineSegments(edges,
       new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25 }));
     line.position.copy(mesh.position);
+    line.visible = true;
     scene.add(line);
+
+    _three.meshPairs.push({ mesh: mesh, line: line });
   });
+
+  /* 初期状態は全表示（静止表示）、アニメーションコントロールを表示 */
+  _animSetVisible(_three.total);
+  var ctrl = document.getElementById('animControls');
+  if (ctrl) ctrl.style.display = 'block';
 
   /* アニメーションループ */
   function animate() {

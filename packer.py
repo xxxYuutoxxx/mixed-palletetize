@@ -43,10 +43,12 @@ def select_next_case(
     queue: List[CaseItem],
     placements: List[Placement],
     supply: SupplyConfig,
-    rules: RuleConfig
+    rules: RuleConfig,
+    skip_counts: Optional[Dict[int, int]] = None,
 ) -> Optional[Tuple[int, CaseItem]]:
     """
     供給キューから次に配置すべきケースのインデックスと CaseItem を選ぶ。
+    skip_counts: id(CaseItem) → スキップ回数。バッファモード時のスタベーション防止に使用。
     """
     if not queue:
         return None
@@ -56,6 +58,17 @@ def select_next_case(
 
     if supply.mode == "buffer":
         candidates = list(enumerate(queue[:supply.buffer_size]))
+        # スタベーション防止: buffer_size 回以上スキップされたアイテムを強制選択
+        if skip_counts:
+            threshold = supply.buffer_size
+            starved = [
+                (i, c) for i, c in candidates
+                if skip_counts.get(id(c), 0) >= threshold
+            ]
+            if starved:
+                # 最もスキップ回数の多いアイテムを優先
+                starved.sort(key=lambda ic: skip_counts.get(id(ic[1]), 0), reverse=True)
+                return starved[0]
     else:
         candidates = list(enumerate(queue))
 
@@ -109,13 +122,22 @@ def pack_single_pallet(
     truly_unplaceable: List[CaseItem] = []
     sequence = 0
     consecutive_failures = 0
+    skip_counts: Dict[int, int] = {}  # id(CaseItem) → スキップ回数
 
     while queue:
-        result = select_next_case(queue, placements, supply, rules)
+        result = select_next_case(queue, placements, supply, rules, skip_counts)
         if result is None:
             break
 
         queue_idx, case_item = result
+
+        # バッファモード: 選ばれなかったアイテムのスキップ数を更新
+        if supply.mode == "buffer":
+            for i, c in enumerate(queue[:supply.buffer_size]):
+                if i != queue_idx:
+                    skip_counts[id(c)] = skip_counts.get(id(c), 0) + 1
+            skip_counts.pop(id(case_item), None)  # 選ばれたアイテムはリセット
+
         candidates = generate_candidates(placements, pallet, rules.overhang_limit)
         if not candidates:
             candidates = [CandidatePosition(0, 0, 0, "origin")]
@@ -169,6 +191,7 @@ def pack_single_pallet(
                         rotation=rot,
                         group=case_item.group,
                         fragile=case_item.fragile,
+                        stackable=case_item.stackable,
                         color=case_item.color,
                         sequence=sequence,
                         temperature=case_item.temperature,
@@ -241,7 +264,8 @@ def _get_valid_placements_for_item(
                 x=x, y=y, z=z,
                 length=case_l, width=case_w, height=case_h,
                 weight=item.weight, rotation=rot,
-                group=item.group, fragile=item.fragile, color=item.color,
+                group=item.group, fragile=item.fragile,
+                stackable=item.stackable, color=item.color,
                 sequence=len(placements),
                 temperature=item.temperature,
                 max_top_load=item.max_top_load,
@@ -264,9 +288,16 @@ def pack_single_pallet_beam(
 ) -> Tuple[List[Placement], List[CaseItem], List[CaseItem]]:
     """
     ビームサーチによる1パレット積付。
-    各アイテムを固定順で処理し、上位 beam_width 件の配置を並列探索する。
+    - free/fifo モード: 固定順で各アイテムを処理し上位 beam_width 件を並列探索
+    - buffer モード: バッファ内の全アイテムを各ステップで候補として展開
     戻り値: (配置済みリスト, 残りケース, 絶対配置不可リスト)
     """
+    if supply.mode == "buffer":
+        return _pack_beam_buffer(
+            cases_queue, pallet, supply, rules, score_cfg, exec_mode, beam_width
+        )
+
+    # ── free / fifo モード: 固定順ビームサーチ ──
     items = list(cases_queue)
     n = len(items)
 
@@ -282,16 +313,13 @@ def pack_single_pallet_beam(
             )
 
             if valid:
-                # 上位 beam_width 件の配置でブランチ
                 for score, new_p in valid[:beam_width]:
                     next_candidates.append(
                         (placements + [new_p], placed | frozenset([i]), cum_score + score)
                     )
             else:
-                # このアイテムは配置不可 → スキップして状態を維持
                 next_candidates.append((placements, placed, cum_score))
 
-        # (配置数の多さ, スコアの高さ) 降順でソートし上位 beam_width 件を保持
         next_candidates.sort(key=lambda s: (len(s[1]), s[2]), reverse=True)
         beam = next_candidates[:beam_width]
 
@@ -299,12 +327,83 @@ def pack_single_pallet_beam(
         return [], list(cases_queue), []
 
     best_placements, best_placed, _ = beam[0]
-
-    # sequence を実際の配置順に振り直す
     for idx, p in enumerate(best_placements):
         p.sequence = idx
 
     remaining = [items[i] for i in range(n) if i not in best_placed]
+    return best_placements, remaining, []
+
+
+def _pack_beam_buffer(
+    cases_queue: List[CaseItem],
+    pallet: PalletConfig,
+    supply: SupplyConfig,
+    rules: RuleConfig,
+    score_cfg: ScoreConfig,
+    exec_mode: str,
+    beam_width: int,
+) -> Tuple[List[Placement], List[CaseItem], List[CaseItem]]:
+    """
+    バッファモード対応ビームサーチ。
+    各ステップでバッファ内の全アイテムを候補として展開し、
+    上位 beam_width 件のビーム状態を維持する。
+    ビーム状態: (placements, remaining_queue, cumulative_score)
+    """
+    # ビーム状態: (placements, remaining_queue, cum_score)
+    BeamState = Tuple[List[Placement], List[CaseItem], float]
+    beam: List[BeamState] = [([], list(cases_queue), 0.0)]
+
+    max_steps = len(cases_queue) + 5  # 最大ステップ数（安全マージン）
+
+    for _ in range(max_steps):
+        # 全ビーム状態のキューが空なら終了
+        if all(not state[1] for state in beam):
+            break
+
+        next_beam: List[BeamState] = []
+        any_placed = False
+
+        for placements, queue, cum_score in beam:
+            if not queue:
+                next_beam.append((placements, queue, cum_score))
+                continue
+
+            buf_size = min(supply.buffer_size, len(queue))
+            placed_from_state = False
+
+            for buf_idx in range(buf_size):
+                item = queue[buf_idx]
+                valid = _get_valid_placements_for_item(
+                    item, placements, pallet, rules, score_cfg, exec_mode
+                )
+                if valid:
+                    placed_from_state = True
+                    any_placed = True
+                    for score, new_p in valid[:beam_width]:
+                        new_queue = [q for j, q in enumerate(queue) if j != buf_idx]
+                        next_beam.append((
+                            placements + [new_p],
+                            new_queue,
+                            cum_score + score,
+                        ))
+
+            if not placed_from_state:
+                # このビーム状態のバッファ内に配置可能なアイテムがない → 終了
+                next_beam.append((placements, [], cum_score))
+
+        if not any_placed:
+            break
+
+        # (配置数, スコア) 降順でソートし上位 beam_width 件を保持
+        next_beam.sort(key=lambda s: (len(s[0]), s[2]), reverse=True)
+        beam = next_beam[:beam_width]
+
+    if not beam:
+        return [], list(cases_queue), []
+
+    best_placements, remaining, _ = beam[0]
+    for idx, p in enumerate(best_placements):
+        p.sequence = idx
     return best_placements, remaining, []
 
 
@@ -363,8 +462,11 @@ def pack(
                 })
             break
 
-        for p in placements:
+        # sequence をグローバル通番に振り直す（複数パレット時のアニメーション順序保証）
+        offset = len(all_placements)
+        for i, p in enumerate(placements):
             p.pallet_id = pallet_count
+            p.sequence = offset + i
         all_placements.extend(placements)
         queue = remaining
 

@@ -41,6 +41,10 @@ class PackRequest(BaseModel):
 
 @app.post("/api/pack")
 def api_pack(req: PackRequest):
+    import json
+    print("\n=== REQUEST PARAMS ===")
+    print(json.dumps({"pallet": req.pallet, "supply": req.supply, "rules": req.rules, "exec_mode": req.exec_mode, "beam_width": req.beam_width}, ensure_ascii=False, indent=2))
+    print("=====================\n")
     cases = [
         CaseItem(
             sku_id=c.get("sku_id", ""),

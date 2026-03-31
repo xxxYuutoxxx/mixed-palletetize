@@ -144,11 +144,19 @@ def compute_score(
     戻り値: (total_score, ScoreBreakdown)
     """
     s_support = score_support_ratio(x, y, z, case_l, case_w, placements)
-    s_height = score_height_suppression(z, case_h, pallet)
+
+    # stack_priority: 高い位置を優先（高さ抑制スコアを反転）
+    if rules.stack_priority:
+        top = z + case_h
+        ratio = top / pallet.effective_height if pallet.effective_height > 0 else 1.0
+        s_height = min(1.0, ratio)
+    else:
+        s_height = score_height_suppression(z, case_h, pallet)
+
     s_void = score_void_suppression(x, y, z, case_l, case_w, placements, pallet)
     s_group = score_sku_grouping(x, y, z, case_l, case_w, case_h, case_item, placements)
 
-    # center vs outer は排他: どちらのルールが有効かで切り替え
+    # center vs outer は排他
     if rules.center_priority:
         s_position = score_center_bias(x, y, case_l, case_w, pallet)
     elif rules.outer_priority:
@@ -157,25 +165,34 @@ def compute_score(
         s_position = (score_center_bias(x, y, case_l, case_w, pallet) +
                       score_outer_wall(x, y, case_l, case_w, pallet)) / 2
 
-    w_group = score_cfg.w_group if rules.same_group else 0.0
-    w_center = score_cfg.w_center
-    remaining = 1.0 - w_group
+    # 重みを正規化して合計が常に 1.0 になるようにする
+    w_support = score_cfg.w_support
+    w_center  = score_cfg.w_center
+    w_height  = score_cfg.w_height
+    w_void    = score_cfg.w_void
+    w_group   = score_cfg.w_group if rules.same_group else 0.0
+
+    total_w = w_support + w_center + w_height + w_void + w_group
+    if total_w > 0:
+        norm = 1.0 / total_w
+    else:
+        norm = 0.0
 
     score = (
-        s_support * score_cfg.w_support * remaining +
-        s_position * w_center * remaining +
-        s_height * score_cfg.w_height * remaining +
-        s_void * score_cfg.w_void * remaining +
-        s_group * w_group
+        s_support  * w_support * norm +
+        s_position * w_center  * norm +
+        s_height   * w_height  * norm +
+        s_void     * w_void    * norm +
+        s_group    * w_group   * norm
     )
 
     total = min(1.0, max(0.0, score))
     breakdown = ScoreBreakdown(
-        support_score=round(s_support, 4),
-        center_score=round(s_position, 4),
-        height_score=round(s_height, 4),
-        void_score=round(s_void, 4),
-        group_score=round(s_group, 4),
-        total_score=round(total, 4),
+        support_score=round(s_support,  4),
+        center_score =round(s_position, 4),
+        height_score =round(s_height,   4),
+        void_score   =round(s_void,     4),
+        group_score  =round(s_group,    4),
+        total_score  =round(total,      4),
     )
     return total, breakdown

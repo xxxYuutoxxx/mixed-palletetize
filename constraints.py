@@ -206,6 +206,28 @@ def _calc_weight_above(target: Placement, placements: List[Placement]) -> float:
     return total
 
 
+def check_stackable(
+    x: int, y: int, z: int,
+    case_l: int, case_w: int,
+    placements: List[Placement],
+) -> CheckResult:
+    """
+    積み重ね不可チェック:
+    stackable=False のケースの天面に他のケースを置こうとしている場合NG。
+    """
+    if z == 0:
+        return True, ""
+
+    for p in placements:
+        if not p.stackable and p.z2 == z:
+            ox = max(0, min(x + case_l, p.x2) - max(x, p.x))
+            oy = max(0, min(y + case_w, p.y2) - max(y, p.y))
+            if ox > 0 and oy > 0:
+                return False, f"{p.sku_id} は積み重ね不可（stackable=False）"
+
+    return True, ""
+
+
 def check_max_top_load(
     x: int, y: int, z: int,
     case_l: int, case_w: int,
@@ -276,6 +298,8 @@ def run_all_checks(
             case_item, placements, x, y, z, case_l, case_w, case_h, rules)),
         ("max_top_load", check_max_top_load(
             x, y, z, case_l, case_w, case_item, placements)),
+        ("stackable", check_stackable(
+            x, y, z, case_l, case_w, placements)),
     ]
 
     if hit_stats is not None:

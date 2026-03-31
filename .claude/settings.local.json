@@ -79,7 +79,10 @@
       "Bash(curl -s http://127.0.0.1:8000/api/pack -X POST -H \"Content-Type: application/json\" -d \"{\"\"cases\"\":[{\"\"sku_id\"\":\"\"A\"\",\"\"name\"\":\"\"A\"\",\"\"length\"\":520,\"\"width\"\":365,\"\"height\"\":400,\"\"weight\"\":9.3,\"\"quantity\"\":1,\"\"color\"\":\"\"#ff0000\"\"}],\"\"pallet\"\":{}}\")",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''pallet_id:'''', d[''''placements''''][0].get\\(''''pallet_id'''',''''MISSING''''\\)\\)\")",
       "Bash(cmd.exe /c \"taskkill /PID 37792 /F\" 2>&1)",
-      "Bash(powershell -Command \"Stop-Process -Id 37792 -Force\" 2>&1)"
+      "Bash(powershell -Command \"Stop-Process -Id 37792 -Force\" 2>&1)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(grep -n \"case_item.length.*>\" *.py)"
     ],
     "defaultMode": "acceptEdits"
   }

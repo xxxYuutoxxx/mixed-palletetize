@@ -24,14 +24,21 @@ def generate_candidates(
             seen.add((x, y, z))
             candidates.append(CandidatePosition(x, y, z, source))
 
-    # 原点は常に候補（オーバーハング時は負方向の隅も追加）
-    add(0, 0, 0, "origin")
+    # 原点候補の設定
     if overhang_limit > 0:
         oh_x = int(pallet.length * overhang_limit)
         oh_y = int(pallet.width * overhang_limit)
-        add(-oh_x, -oh_y, 0, "origin")
-        add(-oh_x,      0, 0, "origin")
-        add(     0, -oh_y, 0, "origin")
+        if not placements:
+            # 1ケース目: XY両方向にオーバーハング分ずらした位置を起点にする。
+            # これにより正方向のオーバーハング領域も2ケース目以降で使えるようになる。
+            add(-oh_x, -oh_y, 0, "origin")
+        else:
+            add(0, 0, 0, "origin")
+            add(-oh_x, -oh_y, 0, "origin")
+            add(-oh_x,      0, 0, "origin")
+            add(     0, -oh_y, 0, "origin")
+    else:
+        add(0, 0, 0, "origin")
 
     for p in placements:
         # 右隣 (X方向)

@@ -109,20 +109,22 @@ class ConstraintHitStats:
     temperature: int = 0     # 温度帯違反
     total_weight: int = 0    # 総重量超過
     max_top_load: int = 0    # 上面荷重超過
+    stackable: int = 0       # 積み重ね不可違反
     total_checked: int = 0   # 全候補チェック数（回転×位置の組み合わせ）
 
     def to_dict(self) -> Dict[str, int]:
         return {
-            "範囲外":       self.pallet_bounds,
-            "衝突":         self.collision,
-            "支持率不足":   self.support_ratio,
-            "fragile違反":  self.fragile,
-            "重量物違反":   self.heavy_bottom,
-            "積段数超過":   self.max_stack,
-            "温度帯違反":   self.temperature,
-            "総重量超過":   self.total_weight,
-            "上面荷重超過": self.max_top_load,
-            "総チェック数": self.total_checked,
+            "範囲外":           self.pallet_bounds,
+            "衝突":             self.collision,
+            "支持率不足":       self.support_ratio,
+            "fragile違反":      self.fragile,
+            "重量物違反":       self.heavy_bottom,
+            "積段数超過":       self.max_stack,
+            "温度帯違反":       self.temperature,
+            "総重量超過":       self.total_weight,
+            "上面荷重超過":     self.max_top_load,
+            "積み重ね不可違反": self.stackable,
+            "総チェック数":     self.total_checked,
         }
 
 
@@ -141,6 +143,7 @@ class Placement:
     rotation: int   # 0 or 90 degrees (Z軸回転)
     group: str = ""
     fragile: bool = False
+    stackable: bool = True       # 積み重ね可能フラグ (CaseItemから引き継ぎ)
     color: str = "#4A90D9"
     sequence: int = 0  # 配置順序
     temperature: str = "normal"  # 温度帯
