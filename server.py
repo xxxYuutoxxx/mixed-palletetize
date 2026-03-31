@@ -8,11 +8,13 @@ server.py — FastAPI サーバー
     python server.py
 """
 from __future__ import annotations
-import sys
+import os
+import secrets
 import uvicorn
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from typing import List, Any, Dict
 
@@ -22,9 +24,25 @@ from io_handler import result_to_dict
 
 app = FastAPI(title="パレタイズ積付計算システム")
 BASE_DIR = Path(__file__).parent
+security = HTTPBasic()
+
+# 環境変数からID/パスワードを取得（未設定時はデフォルト値）
+APP_USER     = os.environ.get("APP_USER",     "admin")
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "palletize2026")
 
 
-@app.get("/", response_class=HTMLResponse)
+def require_auth(credentials: HTTPBasicCredentials = Depends(security)):
+    ok_user = secrets.compare_digest(credentials.username.encode(), APP_USER.encode())
+    ok_pass = secrets.compare_digest(credentials.password.encode(), APP_PASSWORD.encode())
+    if not (ok_user and ok_pass):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="認証に失敗しました",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+
+@app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
 def index():
     return (BASE_DIR / "index.html").read_text(encoding="utf-8")
 
@@ -39,7 +57,7 @@ class PackRequest(BaseModel):
     beam_width: int = 1
 
 
-@app.post("/api/pack")
+@app.post("/api/pack", dependencies=[Depends(require_auth)])
 def api_pack(req: PackRequest):
     import json
     print("\n=== REQUEST PARAMS ===")
