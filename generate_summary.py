@@ -215,12 +215,8 @@ ROW_HEIGHT_PT = 174 # 行高 [pt]  ≈ IMAGE_H_PX * 72/96
 MAX_PALLETS = 3     # 最大パレット数（列数）
 
 
-def build_excel(results: list[dict], output_path: str) -> None:
-    wb = Workbook()
-    ws = wb.active
-    ws.title = 'サマリー一覧'
-
-    # 画像列ヘッダーをパレット数分追加
+def _fill_sheet(ws, results: list[dict]) -> None:
+    """ワークシートにヘッダー＋データを書き込む"""
     pallet_img_headers = [
         (f'等角3D図({i+1}枚目)', 42) for i in range(MAX_PALLETS)
     ]
@@ -277,39 +273,39 @@ def build_excel(results: list[dict], output_path: str) -> None:
 
         ws.row_dimensions[row_idx].height = ROW_HEIGHT_PT
 
-    # ---- 先頭行を固定 ----
     ws.freeze_panes = 'A2'
 
+
+def build_excel(sheet_data: list[tuple[str, list[dict]]], output_path: str) -> None:
+    """
+    sheet_data: [(シート名, results), ...] のリスト
+    """
+    wb = Workbook()
+    for i, (sheet_name, results) in enumerate(sheet_data):
+        ws = wb.active if i == 0 else wb.create_sheet()
+        ws.title = sheet_name
+        _fill_sheet(ws, results)
     wb.save(output_path)
 
 
 # ---------------------------------------------------------------------------
-# メイン
+# 計算ループ（設定を外部から指定可能）
 # ---------------------------------------------------------------------------
-def main():
-    data_dir = Path('data')
-    csv_files = sorted(data_dir.glob('*.csv'), key=lambda p: p.stem)
-
-    print(f"CSV files found: {len(csv_files)}")
-    print("-" * 60)
-
+def run_calculations(csv_files, supply: SupplyConfig, beam_width: int) -> list[dict]:
     results: list[dict] = []
-
     for csv_file in csv_files:
         case_id = csv_file.stem
         print(f"[{case_id}] ", end='', flush=True)
-
         try:
             cases = parse_csv(csv_file)
             if not cases:
                 print("  no data, skip")
                 continue
 
-            result = pack(cases, DEFAULT_PALLET, DEFAULT_SUPPLY,
+            result = pack(cases, DEFAULT_PALLET, supply,
                           DEFAULT_RULES, DEFAULT_SCORING,
-                          exec_mode=DEFAULT_EXEC, beam_width=DEFAULT_BEAM)
+                          exec_mode=DEFAULT_EXEC, beam_width=beam_width)
 
-            # パレットごとに等角3D図を生成
             pallet_ids = sorted(set(p.pallet_id for p in result.placements))
             img_bufs = []
             for pid in pallet_ids:
@@ -345,12 +341,39 @@ def main():
         except Exception as e:
             print(f"ERROR: {e}")
             traceback.print_exc()
+    return results
 
-    # Excel 出力
+
+# ---------------------------------------------------------------------------
+# メイン
+# ---------------------------------------------------------------------------
+def main():
+    data_dir = Path('data')
+    csv_files = sorted(data_dir.glob('*.csv'), key=lambda p: p.stem)
     output_path = 'Summary_混載パレタイズ積付計算結果.xlsx'
-    print("-" * 60)
-    print(f"Writing Excel... ({len(results)} cases)")
-    build_excel(results, output_path)
+
+    print(f"CSV files found: {len(csv_files)}")
+
+    # ---- シート1: FIFO制約あり ----
+    print("\n" + "=" * 60)
+    print("【シート1】FIFOあり (mode=fifo, buffer_size=5, beam=5)")
+    print("=" * 60)
+    results_fifo = run_calculations(csv_files, DEFAULT_SUPPLY, DEFAULT_BEAM)
+
+    # ---- シート2: バッファあり ----
+    buffer_supply = SupplyConfig(mode='buffer', buffer_size=6)
+    print("\n" + "=" * 60)
+    print("【シート2】バッファあり (mode=buffer, buffer_size=6, beam=6)")
+    print("=" * 60)
+    results_buffer = run_calculations(csv_files, buffer_supply, beam_width=6)
+
+    # ---- Excel 出力 ----
+    print("\n" + "-" * 60)
+    print(f"Writing Excel...")
+    build_excel([
+        ('サマリー一覧',  results_fifo),
+        ('バッファあり',  results_buffer),
+    ], output_path)
     print(f"Done: {output_path}")
 
 
