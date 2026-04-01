@@ -92,6 +92,62 @@ def score_void_suppression(
     return score_support_ratio(x, y, z, case_l, case_w, placements)
 
 
+def score_sku_block_continuation(
+    x: int, y: int, z: int,
+    case_l: int, case_w: int,
+    case_item: CaseItem,
+    placements: List[Placement]
+) -> float:
+    """
+    同一SKUのブロック積みパターン継続スコア（面積み）。
+    既存の同一SKU配置パターンを検出し、それを継続する位置に高スコアを返す。
+      1.0: 同じ行を X 方向に延長する位置（行継続）
+      0.9: 同じ列を Y 方向に延長する位置（列継続）
+      0.8: 既存ブロックの隣に新しい行を開始する位置
+      0.7: 完成したブロック段の真上（段積み継続）
+      0.5: 同一SKUが未配置（最初の1個）→ 中立
+      0.0: パターン外
+    """
+    same_sku = [p for p in placements if p.sku_id == case_item.sku_id]
+    if not same_sku:
+        return 0.5  # 最初の1個は中立
+
+    same_z = [p for p in same_sku if p.z == z]
+
+    # ① 行継続: 同じ Y・Z で X 方向に隣接
+    for p in same_z:
+        if p.y == y and p.x2 == x:
+            return 1.0
+        if p.y == y and x + case_l == p.x:
+            return 1.0
+
+    # ② 列継続: 同じ X・Z で Y 方向に隣接
+    for p in same_z:
+        if p.x == x and p.y2 == y:
+            return 0.9
+        if p.x == x and y + case_w == p.y:
+            return 0.9
+
+    # ③ 新しい行の先頭: 既存ブロックの Y 方向隣かつ X=ブロック開始位置
+    if same_z:
+        block_x_start = min(p.x for p in same_z)
+        block_y_max   = max(p.y2 for p in same_z)
+        block_y_min   = min(p.y  for p in same_z)
+        if x == block_x_start and (y == block_y_max or y + case_w == block_y_min):
+            return 0.8
+
+    # ④ 段積み継続: 同一SKU群の最上面の真上
+    for p in same_sku:
+        if (p.x == x and p.y == y and p.z2 == z):
+            return 0.7
+        # XY が重なっていて z が接している場合も許容
+        xy_match = (p.x == x and p.y == y)
+        if xy_match and p.z2 == z:
+            return 0.7
+
+    return 0.0
+
+
 def score_sku_grouping(
     x: int, y: int, z: int,
     case_l: int, case_w: int, case_h: int,
@@ -155,6 +211,7 @@ def compute_score(
 
     s_void = score_void_suppression(x, y, z, case_l, case_w, placements, pallet)
     s_group = score_sku_grouping(x, y, z, case_l, case_w, case_h, case_item, placements)
+    s_block = score_sku_block_continuation(x, y, z, case_l, case_w, case_item, placements)
 
     # center vs outer は排他
     if rules.center_priority:
@@ -171,8 +228,9 @@ def compute_score(
     w_height  = score_cfg.w_height
     w_void    = score_cfg.w_void
     w_group   = score_cfg.w_group if rules.same_group else 0.0
+    w_block   = score_cfg.w_block if rules.block_stacking else 0.0
 
-    total_w = w_support + w_center + w_height + w_void + w_group
+    total_w = w_support + w_center + w_height + w_void + w_group + w_block
     if total_w > 0:
         norm = 1.0 / total_w
     else:
@@ -183,7 +241,8 @@ def compute_score(
         s_position * w_center  * norm +
         s_height   * w_height  * norm +
         s_void     * w_void    * norm +
-        s_group    * w_group   * norm
+        s_group    * w_group   * norm +
+        s_block    * w_block   * norm
     )
 
     total = min(1.0, max(0.0, score))
@@ -193,6 +252,7 @@ def compute_score(
         height_score =round(s_height,   4),
         void_score   =round(s_void,     4),
         group_score  =round(s_group,    4),
+        block_score  =round(s_block,    4),
         total_score  =round(total,      4),
     )
     return total, breakdown

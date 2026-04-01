@@ -61,6 +61,7 @@ class RuleConfig:
     overhang_limit: float = 0.0    # 許容はみ出し率 0.0〜0.3
     support_ratio_min: float = 0.7 # 最小支持率
     height_tolerance: int = 0      # 同一平面とみなす高さ差許容値 mm (0=完全一致)
+    block_stacking: bool = False   # 同一品種ブロック積み優先（面積み）
     priority_order: List[str] = field(default_factory=lambda: [
         "heavy_bottom", "fragile_top", "same_group"
     ])
@@ -74,6 +75,7 @@ class ScoreConfig:
     w_height: float = 0.20    # 高さ抑制
     w_void: float = 0.10      # 空隙抑制
     w_group: float = 0.10     # SKUグループ集約
+    w_block: float = 0.50     # ブロック積みパターン継続（block_stacking有効時のみ使用）
 
 
 @dataclass
@@ -84,6 +86,7 @@ class ScoreBreakdown:
     height_score: float = 0.0
     void_score: float = 0.0
     group_score: float = 0.0
+    block_score: float = 0.0
     total_score: float = 0.0
 
     def to_dict(self) -> Dict[str, float]:
@@ -93,6 +96,7 @@ class ScoreBreakdown:
             "height_score":  round(self.height_score,  3),
             "void_score":    round(self.void_score,    3),
             "group_score":   round(self.group_score,   3),
+            "block_score":   round(self.block_score,   3),
             "total_score":   round(self.total_score,   3),
         }
 

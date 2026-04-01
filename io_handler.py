@@ -71,6 +71,7 @@ def parse_input(data: Dict[str, Any]):
         overhang_limit=float(r.get("overhang_limit", 0.0)),
         support_ratio_min=float(r.get("support_ratio_min", 0.7)),
         height_tolerance=int(r.get("height_tolerance", 0)),
+        block_stacking=bool(r.get("block_stacking", False)),
         priority_order=r.get("priority_order", ["heavy_bottom", "fragile_top"]),
     )
 
@@ -81,6 +82,7 @@ def parse_input(data: Dict[str, Any]):
         w_height=float(sc.get("w_height", 0.20)),
         w_void=float(sc.get("w_void", 0.10)),
         w_group=float(sc.get("w_group", 0.10)),
+        w_block=float(sc.get("w_block", 0.50)),
     )
 
     exec_mode = data.get("exec_mode", "real")

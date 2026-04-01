@@ -115,6 +115,7 @@ def api_pack(req: PackRequest):
         overhang_limit=float(r.get("overhang_limit", 0.0)),
         support_ratio_min=float(r.get("support_ratio_min", 0.7)),
         height_tolerance=int(r.get("height_tolerance", 0)),
+        block_stacking=bool(r.get("block_stacking", False)),
     )
 
     sc = req.scoring
@@ -131,6 +132,7 @@ def api_pack(req: PackRequest):
         w_height=norm(sc.get("w_height", 20)),
         w_void=norm(sc.get("w_void", 10)),
         w_group=norm(sc.get("w_group", 10)),
+        w_block=float(sc.get("w_block", 0.50)),  # ブロック積み重みは別途正規化
     )
 
     beam_width = max(1, min(int(req.beam_width), 10))  # 1〜10 に制限
