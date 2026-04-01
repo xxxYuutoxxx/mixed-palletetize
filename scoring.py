@@ -114,27 +114,23 @@ def score_sku_block_continuation(
 
     same_z = [p for p in same_sku if p.z == z]
 
-    # ① 行継続: 同じ Y・Z で X 方向に隣接
+    # ① 行継続: 同じ Y・Z で X 方向に隣接（最優先）
     for p in same_z:
         if p.y == y and p.x2 == x:
             return 1.0
         if p.y == y and x + case_l == p.x:
             return 1.0
 
-    # ② 列継続: 同じ X・Z で Y 方向に隣接
-    for p in same_z:
-        if p.x == x and p.y2 == y:
-            return 0.9
-        if p.x == x and y + case_w == p.y:
-            return 0.9
-
-    # ③ 新しい行の先頭: 既存ブロックの Y 方向隣かつ X=ブロック開始位置
+    # ② 新しい行の先頭: X=ブロック開始位置 かつ 左端列ケースの直隣（Y方向）
+    #    block_y_max 一律ではなく左端列の各ケースの y2/y を参照することで
+    #    回転混在時にも正しく新行開始位置を検出する
     if same_z:
         block_x_start = min(p.x for p in same_z)
-        block_y_max   = max(p.y2 for p in same_z)
-        block_y_min   = min(p.y  for p in same_z)
-        if x == block_x_start and (y == block_y_max or y + case_w == block_y_min):
-            return 0.8
+        left_col = [p for p in same_z if p.x == block_x_start]
+        if x == block_x_start:
+            for p in left_col:
+                if y == p.y2 or y + case_w == p.y:
+                    return 0.8
 
     # ④ 段積み継続: 同一SKU群の最上面の真上
     for p in same_sku:

@@ -100,6 +100,25 @@ def get_rotations(case: CaseItem) -> List[Tuple[int, int, int, int]]:
     return rotations
 
 
+def get_rotations_block(
+    case: CaseItem,
+    placements: List[Placement],
+) -> List[Tuple[int, int, int, int]]:
+    """
+    ブロック積みモード用: 同一SKUが既に配置済みの場合、その回転に揃える。
+    同一SKUがまだない場合は通常の回転リストを返す。
+    """
+    same_sku = [p for p in placements if p.sku_id == case.sku_id]
+    if not same_sku:
+        return get_rotations(case)
+    # 最初に配置された同一SKUの rotation を採用
+    first_rot = same_sku[0].rotation
+    l, w, h = case.length, case.width, case.height
+    if first_rot == 90:
+        return [(w, l, h, 90)]
+    return [(l, w, h, 0)]
+
+
 # ---------------------------------------------------------------------------
 # メイン貪欲アルゴリズム
 # ---------------------------------------------------------------------------
@@ -146,7 +165,8 @@ def pack_single_pallet(
         best_placement: Optional[Placement] = None
 
         for cand in candidates:
-            for case_l, case_w, case_h, rot in get_rotations(case_item):
+            rotations = get_rotations_block(case_item, placements) if rules.block_stacking else get_rotations(case_item)
+            for case_l, case_w, case_h, rot in rotations:
                 actual_z = get_support_z(cand.x, cand.y, case_l, case_w, placements)
                 x, y, z = cand.x, cand.y, actual_z
 
