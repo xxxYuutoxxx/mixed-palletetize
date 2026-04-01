@@ -846,10 +846,10 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
     <div class="card">
       <div class="card-title">最適化プリセット</div>
       <div class="preset-btns">
-        <button class="preset-btn active" data-preset="standard"  onclick="applyPreset('standard')">⚖ 標準</button>
+        <button class="preset-btn" data-preset="standard"  onclick="applyPreset('standard')">⚖ 標準</button>
         <button class="preset-btn" data-preset="stability" onclick="applyPreset('stability')">🛡 安定性優先</button>
         <button class="preset-btn" data-preset="loadRate"  onclick="applyPreset('loadRate')">📊 積載率優先</button>
-        <button class="preset-btn" data-preset="field"     onclick="applyPreset('field')">🏭 現場再現優先</button>
+        <button class="preset-btn active" data-preset="field"     onclick="applyPreset('field')">🏭 現場再現優先</button>
       </div>
     </div>
 
@@ -1292,7 +1292,7 @@ const initialData = [
 /* ── STATE ── */
 let rows = [], rowId = 0;
 let supplyMode = 'fifo';
-let currentPreset = 'standard';
+let currentPreset = 'field';
 let execMode = 'real';
 
 /* ── PALLET GETTERS ── */
@@ -2667,6 +2667,9 @@ function updateSpecBar() {
 document.addEventListener('DOMContentLoaded', function() {
   /* initial rows */
   initialData.forEach(function(d) { addRow(d); });
+
+  /* デフォルトプリセット適用 */
+  applyPreset('field');
 
   /* eff height auto-calc */
   function updateEffHeight() {
