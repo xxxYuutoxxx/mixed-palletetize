@@ -80,6 +80,64 @@ PRESETS: dict[str, dict] = {
         "rules":   {"support_ratio_min": 0.7, "block_stacking": True},
         "beam_width": 1,
     },
+    # カテゴリ2: 配置戦略の変更
+    "same_group": {
+        "scoring": {"w_support": 35, "w_center": 25, "w_height": 20, "w_void": 10, "w_group": 10},
+        "rules":   {"support_ratio_min": 0.7, "same_group": True},
+        "beam_width": 1,
+    },
+    "center_priority": {
+        "scoring": {"w_support": 35, "w_center": 25, "w_height": 20, "w_void": 10, "w_group": 10},
+        "rules":   {"support_ratio_min": 0.7, "center_priority": True},
+        "beam_width": 1,
+    },
+    "outer_priority": {
+        "scoring": {"w_support": 35, "w_center": 25, "w_height": 20, "w_void": 10, "w_group": 10},
+        "rules":   {"support_ratio_min": 0.7, "outer_priority": True},
+        "beam_width": 1,
+    },
+    "stack_priority": {
+        "scoring": {"w_support": 35, "w_center": 25, "w_height": 20, "w_void": 10, "w_group": 10},
+        "rules":   {"support_ratio_min": 0.7, "stack_priority": True},
+        "beam_width": 1,
+    },
+    # カテゴリ3: 探索精度
+    "beam5": {
+        "scoring": {"w_support": 35, "w_center": 25, "w_height": 20, "w_void": 10, "w_group": 10},
+        "rules":   {"support_ratio_min": 0.7},
+        "beam_width": 5,
+    },
+    # カテゴリ5: 組み合わせ
+    "outer_loose": {
+        # outer_priority + loose_support（個別で上位2位の組み合わせ）
+        "scoring": {"w_support": 35, "w_center": 25, "w_height": 20, "w_void": 10, "w_group": 10},
+        "rules":   {"support_ratio_min": 0.5, "outer_priority": True},
+        "beam_width": 1,
+    },
+    "stack_loose": {
+        # stack_priority + loose_support（個別で上位2位の組み合わせ）
+        "scoring": {"w_support": 35, "w_center": 25, "w_height": 20, "w_void": 10, "w_group": 10},
+        "rules":   {"support_ratio_min": 0.5, "stack_priority": True},
+        "beam_width": 1,
+    },
+    "outer_stack": {
+        # outer_priority + stack_priority（配置戦略を両方ON）
+        "scoring": {"w_support": 35, "w_center": 25, "w_height": 20, "w_void": 10, "w_group": 10},
+        "rules":   {"support_ratio_min": 0.7, "outer_priority": True, "stack_priority": True},
+        "beam_width": 1,
+    },
+    "group_rule_score": {
+        # same_group + group_heavy（ルールとスコア両方でSKU集約を強制）
+        "scoring": {"w_support": 25, "w_center": 20, "w_height": 20, "w_void": 10, "w_group": 25},
+        "rules":   {"support_ratio_min": 0.7, "same_group": True},
+        "beam_width": 1,
+    },
+    "block_height_tol": {
+        # block_stacking + height_tolerance=10（面積み + 高さ差を許容）
+        "scoring": {"w_support": 35, "w_center": 25, "w_height": 20, "w_void": 10, "w_group": 10},
+        "rules":   {"support_ratio_min": 0.7, "block_stacking": True, "height_tolerance": 10},
+        "beam_width": 1,
+    },
 }
 
 
