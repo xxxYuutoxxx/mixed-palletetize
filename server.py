@@ -22,7 +22,7 @@ from typing import List, Any, Dict, Optional
 from models import CaseItem, PalletConfig, SupplyConfig, RuleConfig, ScoreConfig
 from packer import pack
 from io_handler import result_to_dict
-from log_db import extract_case_features, insert_log, get_logs, get_log_count, export_csv
+from log_db import extract_case_features, insert_log, get_logs, get_log_count, export_csv, find_best_preset
 
 app = FastAPI(title="パレタイズ積付計算システム")
 BASE_DIR = Path(__file__).parent
@@ -169,6 +169,18 @@ def api_pack(req: PackRequest):
         print(f"[log_db] ログ記録に失敗しました: {e}")
 
     return result_dict
+
+
+class RecommendRequest(BaseModel):
+    cases: List[Dict[str, Any]]
+
+
+@app.post("/api/recommend", dependencies=[Depends(require_auth)])
+def api_recommend(req: RecommendRequest):
+    """ケース構成に基づいて最適パラメータを推薦する。"""
+    features = extract_case_features(req.cases)
+    result   = find_best_preset(features)
+    return result
 
 
 @app.get("/api/logs", dependencies=[Depends(require_auth)])

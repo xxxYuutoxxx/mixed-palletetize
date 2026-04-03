@@ -244,6 +244,124 @@ def get_log_count() -> int:
         return conn.execute("SELECT COUNT(*) FROM pack_logs").fetchone()[0]
 
 
+def find_best_preset(features: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    入力ケース構成の特徴量に類似した過去ログを検索し、
+    最もパレット枚数が少なかったパラメータ設定を返す。
+
+    Returns:
+        {
+          "rules": {...},          # 推薦ルール設定
+          "scoring": {...},        # 推薦スコアリング重み
+          "preset_label": str,     # 人間可読ラベル
+          "expected_pallets": float,
+          "similar_count": int,    # 類似ケース数
+          "reason": str
+        }
+    """
+    tc   = features.get("total_cases", 0)
+    ns   = features.get("num_skus", 0)
+    wcv  = features.get("weight_cv", 0.0)
+
+    # 類似判定: total_cases ±40%, num_skus ±4, weight_cv ±0.3
+    tc_lo, tc_hi = tc * 0.6, tc * 1.4
+    ns_lo, ns_hi = max(1, ns - 4), ns + 4
+    wcv_lo, wcv_hi = max(0.0, wcv - 0.3), wcv + 0.3
+
+    with _get_conn() as conn:
+        rows = conn.execute("""
+            SELECT outer_priority, stack_priority, block_stacking, same_group,
+                   center_priority, support_ratio_min, height_tolerance,
+                   w_support, w_center, w_height, w_void, w_group,
+                   AVG(pallet_count) as avg_pc, COUNT(*) as cnt
+            FROM pack_logs
+            WHERE total_cases BETWEEN ? AND ?
+              AND num_skus    BETWEEN ? AND ?
+              AND weight_cv   BETWEEN ? AND ?
+            GROUP BY outer_priority, stack_priority, block_stacking, same_group,
+                     center_priority, support_ratio_min, height_tolerance,
+                     w_support, w_center, w_height, w_void, w_group
+            HAVING cnt >= 1
+            ORDER BY avg_pc ASC
+            LIMIT 1
+        """, (tc_lo, tc_hi, ns_lo, ns_hi, wcv_lo, wcv_hi)).fetchall()
+
+    # 類似ケースが見つからなければ全体ベストにフォールバック
+    if not rows:
+        rows = conn.execute("""
+            SELECT outer_priority, stack_priority, block_stacking, same_group,
+                   center_priority, support_ratio_min, height_tolerance,
+                   w_support, w_center, w_height, w_void, w_group,
+                   AVG(pallet_count) as avg_pc, COUNT(*) as cnt
+            FROM pack_logs
+            GROUP BY outer_priority, stack_priority, block_stacking, same_group,
+                     center_priority, support_ratio_min, height_tolerance,
+                     w_support, w_center, w_height, w_void, w_group
+            HAVING cnt >= 3
+            ORDER BY avg_pc ASC
+            LIMIT 1
+        """).fetchall()
+        similar_count = 0
+    else:
+        similar_count = int(rows[0]["cnt"])
+
+    if not rows:
+        # DBが空: デフォルト値を返す
+        return {
+            "rules":    {"outer_priority": True, "support_ratio_min": 0.5},
+            "scoring":  {"w_support": 35, "w_center": 25, "w_height": 20, "w_void": 10, "w_group": 10},
+            "preset_label": "外周優先＋支持率緩和",
+            "expected_pallets": None,
+            "similar_count": 0,
+            "reason": "蓄積データなし。実績に基づくデフォルト推薦を適用しました。",
+        }
+
+    best = dict(rows[0])
+    rules = {
+        "outer_priority":   bool(best["outer_priority"]),
+        "stack_priority":   bool(best["stack_priority"]),
+        "block_stacking":   bool(best["block_stacking"]),
+        "same_group":       bool(best["same_group"]),
+        "center_priority":  bool(best["center_priority"]),
+        "support_ratio_min": float(best["support_ratio_min"]),
+        "height_tolerance": int(best["height_tolerance"]),
+    }
+    scoring = {
+        "w_support": float(best["w_support"]),
+        "w_center":  float(best["w_center"]),
+        "w_height":  float(best["w_height"]),
+        "w_void":    float(best["w_void"]),
+        "w_group":   float(best["w_group"]),
+    }
+
+    # ラベル生成
+    labels = []
+    if rules["outer_priority"]:   labels.append("外周優先")
+    if rules["stack_priority"]:   labels.append("縦積み優先")
+    if rules["block_stacking"]:   labels.append("面積み優先")
+    if rules["same_group"]:       labels.append("同品種集約")
+    if rules["support_ratio_min"] < 0.65: labels.append("支持率緩和")
+    if rules["height_tolerance"] > 0:     labels.append("高さ差許容")
+    if not labels: labels.append("標準")
+    preset_label = "＋".join(labels)
+
+    reason_parts = []
+    if similar_count > 0:
+        reason_parts.append(f"類似ケース構成 {similar_count} 件の実績から推薦")
+    else:
+        reason_parts.append("全実績データから推薦")
+    reason_parts.append(f"期待パレット枚数: {best['avg_pc']:.2f} 枚")
+
+    return {
+        "rules":            rules,
+        "scoring":          scoring,
+        "preset_label":     preset_label,
+        "expected_pallets": round(float(best["avg_pc"]), 2),
+        "similar_count":    similar_count,
+        "reason":           " / ".join(reason_parts),
+    }
+
+
 def export_csv() -> str:
     """全ログをCSV文字列として返す。"""
     import csv, io

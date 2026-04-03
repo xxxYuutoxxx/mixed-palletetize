@@ -204,7 +204,7 @@ select.form-input { background: #fff; }
 .sub-section-title { font-size: 11px; font-weight: 700; color: #5a7a96; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
 
 /* ── EVAL TAB ── */
-.preset-btns { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.preset-btns { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .preset-btn {
   padding: 8px 20px; border-radius: 6px; border: 2px solid #dde4ea;
   background: #fff; font-family: inherit; font-size: 13px; font-weight: 600;
@@ -212,6 +212,29 @@ select.form-input { background: #fff; }
 }
 .preset-btn:hover { border-color: #e67e22; color: #e67e22; }
 .preset-btn.active { border-color: #e67e22; background: #e67e22; color: #fff; }
+/* AI推薦ボタン */
+.ai-recommend-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 20px; border-radius: 8px;
+  border: 2px solid #8e44ad; background: linear-gradient(135deg, #8e44ad, #6c3483);
+  font-family: inherit; font-size: 13px; font-weight: 700;
+  cursor: pointer; color: #fff; transition: all .2s; margin-bottom: 14px;
+}
+.ai-recommend-btn:hover { background: linear-gradient(135deg, #9b59b6, #7d3c98); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(142,68,173,.3); }
+.ai-recommend-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+.ai-recommend-btn .ai-icon { font-size: 18px; }
+/* AI推薦結果バナー */
+.ai-result-banner {
+  display: none; margin-bottom: 16px;
+  background: linear-gradient(135deg, #f5eef8, #fdf2ff);
+  border: 2px solid #c39bd3; border-radius: 10px; padding: 14px 18px;
+}
+.ai-result-banner.show { display: block; }
+.ai-result-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.ai-result-badge { background: #8e44ad; color: #fff; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 12px; letter-spacing: .05em; }
+.ai-result-label { font-size: 15px; font-weight: 700; color: #6c3483; }
+.ai-result-pallets { font-size: 12px; color: #8e44ad; font-weight: 700; margin-left: auto; }
+.ai-result-reason { font-size: 12px; color: #7d3c98; }
 .slider-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .slider-label { width: 140px; font-size: 13px; color: #5a7a96; font-weight: 600; flex-shrink: 0; }
 input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
@@ -519,6 +542,9 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
 </div>
 
 <!-- ══ MAIN ══ -->
+<!-- AI推薦用hidden値（support_ratio_min） -->
+<input type="hidden" id="aiSupportRatioMin" value="0.7">
+
 <div class="main">
 
   <!-- TABS NAV -->
@@ -845,6 +871,21 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
 
     <div class="card">
       <div class="card-title">最適化プリセット</div>
+      <!-- AI推薦ボタン -->
+      <button class="ai-recommend-btn" id="aiRecommendBtn" onclick="runAIRecommend()">
+        <span class="ai-icon">🧠</span>
+        <span>AI推薦（蓄積データから最適パラメータを自動設定）</span>
+      </button>
+      <!-- AI推薦結果バナー -->
+      <div class="ai-result-banner" id="aiResultBanner">
+        <div class="ai-result-header">
+          <span class="ai-result-badge">AI推薦適用中</span>
+          <span class="ai-result-label" id="aiResultLabel">—</span>
+          <span class="ai-result-pallets" id="aiResultPallets"></span>
+        </div>
+        <div class="ai-result-reason" id="aiResultReason"></div>
+      </div>
+      <!-- 手動プリセット -->
       <div class="preset-btns">
         <button class="preset-btn" data-preset="standard"  onclick="applyPreset('standard')">⚖ 標準</button>
         <button class="preset-btn" data-preset="stability" onclick="applyPreset('stability')">🛡 安定性優先</button>
@@ -1698,6 +1739,7 @@ function runCalc() {
       temp_separate:   !!(document.getElementById('cbTempSeparate')   || {}).checked,
       height_tolerance: parseInt((document.getElementById('heightTolerance') || {value:'0'}).value) || 0,
       block_stacking:  !!(document.getElementById('cbBlockStacking')  || {}).checked,
+      support_ratio_min: parseFloat((document.getElementById('aiSupportRatioMin') || {value:'0.7'}).value) || 0.7,
     },
     scoring: {
       w_support: parseInt((document.getElementById('weight_stability')  || {value:'50'}).value) || 50,
@@ -1854,12 +1896,100 @@ function exportPDF() {
   window.print();
 }
 
+/* ── AI推薦 ── */
+function runAIRecommend() {
+  var cases = collectCases();
+  if (cases.length === 0) { showToast('先にケース情報を入力してください', 'warn'); return; }
+
+  var btn = document.getElementById('aiRecommendBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="ai-icon">⏳</span><span>解析中...</span>';
+
+  var payload = {
+    cases: cases.map(function(c) {
+      return {
+        sku_id: c.id, name: c.name,
+        length: c.l, width: c.w, height: c.h,
+        weight: c.wt, quantity: c.qty,
+        fragile: c.fragile || false,
+        no_flip: c.no_flip || false,
+        temperature: c.temperature || 'normal',
+        max_stack: c.max_stack || 5,
+      };
+    })
+  };
+
+  fetch('/api/recommend', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(rec) {
+    applyAISettings(rec);
+    showAIBanner(rec);
+    showToast('AI推薦パラメータを適用しました', 'ok');
+  })
+  .catch(function(e) {
+    showToast('AI推薦に失敗しました: ' + e, 'warn');
+  })
+  .finally(function() {
+    btn.disabled = false;
+    btn.innerHTML = '<span class="ai-icon">🧠</span><span>AI推薦（蓄積データから最適パラメータを自動設定）</span>';
+  });
+}
+
+function applyAISettings(rec) {
+  var rules = rec.rules || {};
+
+  // チェックボックス適用
+  var cbMap = {
+    outer_priority:  'cbOuterPrio',
+    stack_priority:  'cbStackPriority',
+    block_stacking:  'cbBlockStacking',
+    same_group:      'cbSameGroup',
+    center_priority: 'cbCenterPrio',
+  };
+  Object.keys(cbMap).forEach(function(key) {
+    var el = document.getElementById(cbMap[key]);
+    if (el) el.checked = !!rules[key];
+  });
+
+  // height_tolerance
+  var htEl = document.getElementById('heightTolerance');
+  if (htEl) htEl.value = rules.height_tolerance || 0;
+
+  // support_ratio_min（hidden フィールド）
+  var srEl = document.getElementById('aiSupportRatioMin');
+  if (srEl) srEl.value = (rules.support_ratio_min != null) ? rules.support_ratio_min : 0.7;
+
+  // 手動プリセットのactiveを外す
+  document.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('active'); });
+}
+
+function showAIBanner(rec) {
+  var banner = document.getElementById('aiResultBanner');
+  var label  = document.getElementById('aiResultLabel');
+  var pallets = document.getElementById('aiResultPallets');
+  var reason = document.getElementById('aiResultReason');
+
+  label.textContent  = rec.preset_label || '推薦設定';
+  pallets.textContent = rec.expected_pallets ? ('期待値: ' + rec.expected_pallets + ' 枚') : '';
+  reason.textContent  = rec.reason || '';
+  banner.classList.add('show');
+}
+
 /* ── PRESETS ── */
 function applyPreset(name) {
   currentPreset = name;
   document.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('active'); });
   var btn = document.querySelector('[data-preset="' + name + '"]');
   if (btn) btn.classList.add('active');
+  // AI推薦バナーを非表示・support_ratio_minをデフォルトに戻す
+  var banner = document.getElementById('aiResultBanner');
+  if (banner) banner.classList.remove('show');
+  var srEl = document.getElementById('aiSupportRatioMin');
+  if (srEl) srEl.value = '0.7';
   var p = PRESETS[name];
   Object.keys(p).forEach(function(k) {
     var s = document.getElementById('weight_' + k);
