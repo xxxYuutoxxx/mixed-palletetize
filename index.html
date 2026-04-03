@@ -700,10 +700,15 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
               <input type="number" id="bufferSize" min="1" max="50" value="5">
               <span class="supply-field-desc">バッファに保持する最大ケース数</span>
             </div>
-            <div class="supply-field-row" id="lookaheadRow">
+            <div class="supply-field-row" id="lookaheadRow" style="display:none;">
               <span class="supply-field-label">先読み件数</span>
               <input type="number" id="lookahead" min="1" max="20" value="3">
               <span class="supply-field-desc">最適選択のための先読み件数</span>
+            </div>
+            <div class="supply-field-row" id="fifoLookaheadRow">
+              <span class="supply-field-label">FIFO先読み深さ</span>
+              <input type="number" id="fifoLookaheadDepth" min="0" max="3" value="0">
+              <span class="supply-field-desc">0=無効 / 1=1ステップ / 2=2ステップ / 3=3ステップ（深いほど計算時間増加）</span>
             </div>
             <div class="supply-field-row" id="skipRow" style="display:none;">
               <span class="supply-field-label">ケーススキップ許可</span>
@@ -1531,9 +1536,10 @@ function selectSupplyMode(mode) {
   document.querySelectorAll('.mode-card').forEach(function(c) { c.classList.remove('selected'); });
   var card = document.querySelector('[data-mode="' + mode + '"]');
   if (card) card.classList.add('selected');
-  document.getElementById('bufferSizeRow').style.display = mode === 'buffer' ? 'flex' : 'none';
-  document.getElementById('lookaheadRow').style.display  = mode !== 'fifo'   ? 'flex' : 'none';
-  document.getElementById('skipRow').style.display       = mode === 'buffer' ? 'flex' : 'none';
+  document.getElementById('bufferSizeRow').style.display    = mode === 'buffer' ? 'flex' : 'none';
+  document.getElementById('lookaheadRow').style.display     = mode === 'buffer' ? 'flex' : 'none';
+  document.getElementById('fifoLookaheadRow').style.display = mode === 'fifo'   ? 'flex' : 'none';
+  document.getElementById('skipRow').style.display          = mode === 'buffer' ? 'flex' : 'none';
   checkConflicts();
 }
 
@@ -1749,7 +1755,8 @@ function runCalc() {
       w_group:   parseInt((document.getElementById('weight_grouping')   || {value:'30'}).value) || 30
     },
     exec_mode: execMode,
-    beam_width: parseInt((document.getElementById('searchModeSelect') || {value:'1'}).value) || 1
+    beam_width: parseInt((document.getElementById('searchModeSelect') || {value:'1'}).value) || 1,
+    fifo_lookahead: supplyMode === 'fifo' ? (parseInt((document.getElementById('fifoLookaheadDepth') || {value:'0'}).value) || 0) : 0
   };
 
   showToast('計算中...');

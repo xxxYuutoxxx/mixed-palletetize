@@ -28,15 +28,10 @@ def generate_candidates(
     if overhang_limit > 0:
         oh_x = int(pallet.length * overhang_limit)
         oh_y = int(pallet.width * overhang_limit)
-        if not placements:
-            # 1ケース目: XY両方向にオーバーハング分ずらした位置を起点にする。
-            # これにより正方向のオーバーハング領域も2ケース目以降で使えるようになる。
-            add(-oh_x, -oh_y, 0, "origin")
-        else:
-            add(0, 0, 0, "origin")
-            add(-oh_x, -oh_y, 0, "origin")
-            add(-oh_x,      0, 0, "origin")
-            add(     0, -oh_y, 0, "origin")
+        add(0, 0, 0, "origin")
+        add(-oh_x, -oh_y, 0, "origin")
+        add(-oh_x,      0, 0, "origin")
+        add(     0, -oh_y, 0, "origin")
     else:
         add(0, 0, 0, "origin")
 

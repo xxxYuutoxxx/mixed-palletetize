@@ -57,6 +57,7 @@ class PackRequest(BaseModel):
     scoring: Dict[str, Any] = {}
     exec_mode: str = "real"
     beam_width: int = 1
+    fifo_lookahead: int = 0
 
 
 @app.post("/api/pack", dependencies=[Depends(require_auth)])
@@ -138,10 +139,12 @@ def api_pack(req: PackRequest):
     )
 
     beam_width = max(1, min(int(req.beam_width), 10))  # 1〜10 に制限
+    fifo_lookahead = max(0, min(int(req.fifo_lookahead), 5))  # 0〜5 に制限
 
     t0 = time.perf_counter()
     result = pack(cases, pallet, supply, rules, score_cfg,
-                  exec_mode=req.exec_mode, beam_width=beam_width)
+                  exec_mode=req.exec_mode, beam_width=beam_width,
+                  fifo_lookahead=fifo_lookahead)
     calc_time_ms = (time.perf_counter() - t0) * 1000
 
     result_dict = result_to_dict(result, pallet)

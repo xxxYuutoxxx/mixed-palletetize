@@ -297,6 +297,37 @@ def _get_valid_placements_for_item(
     return valid
 
 
+def _lookahead_score(
+    items: List[CaseItem],
+    start_idx: int,
+    placements: List[Placement],
+    pallet: PalletConfig,
+    rules: RuleConfig,
+    score_cfg: ScoreConfig,
+    exec_mode: str,
+    depth: int,
+    decay: float = 0.3,
+) -> float:
+    """
+    start_idx から depth ステップ先読みして得られる加重スコアを再帰的に計算する。
+    各ステップのスコアは decay^k で減衰（例: depth=3 → 0.3, 0.09, 0.027）。
+    各ステップでは最良配置1件のみを採用して再帰することで計算量を抑える。
+    """
+    if depth == 0 or start_idx >= len(items):
+        return 0.0
+    valid = _get_valid_placements_for_item(
+        items[start_idx], placements, pallet, rules, score_cfg, exec_mode
+    )
+    if not valid:
+        return 0.0
+    best_score, best_p = valid[0]
+    deeper = _lookahead_score(
+        items, start_idx + 1, placements + [best_p],
+        pallet, rules, score_cfg, exec_mode, depth - 1, decay
+    )
+    return best_score + decay * deeper
+
+
 def pack_single_pallet_beam(
     cases_queue: List[CaseItem],
     pallet: PalletConfig,
@@ -305,11 +336,13 @@ def pack_single_pallet_beam(
     score_cfg: ScoreConfig,
     exec_mode: str = "real",
     beam_width: int = 3,
+    fifo_lookahead: int = 0,
 ) -> Tuple[List[Placement], List[CaseItem], List[CaseItem]]:
     """
     ビームサーチによる1パレット積付。
     - free/fifo モード: 固定順で各アイテムを処理し上位 beam_width 件を並列探索
     - buffer モード: バッファ内の全アイテムを各ステップで候補として展開
+    - fifo_lookahead > 0: FIFOモード時に次ケースの配置スコアを加味した先読みスコアリングを実施
     戻り値: (配置済みリスト, 残りケース, 絶対配置不可リスト)
     """
     if supply.mode == "buffer":
@@ -320,6 +353,9 @@ def pack_single_pallet_beam(
     # ── free / fifo モード: 固定順ビームサーチ ──
     items = list(cases_queue)
     n = len(items)
+
+    # FIFOモード先読みの重み: 次ステップのスコアをこの割合で加算する
+    _LOOKAHEAD_WEIGHT = 0.3
 
     # ビームの各状態: (placements, placed_indices_frozenset, cumulative_score)
     beam: List[Tuple[List[Placement], frozenset, float]] = [([], frozenset(), 0.0)]
@@ -333,10 +369,34 @@ def pack_single_pallet_beam(
             )
 
             if valid:
-                for score, new_p in valid[:beam_width]:
-                    next_candidates.append(
-                        (placements + [new_p], placed | frozenset([i]), cum_score + score)
-                    )
+                # FIFOモードで先読みが有効かつ次のアイテムが存在する場合
+                use_lookahead = (
+                    fifo_lookahead > 0
+                    and supply.mode == "fifo"
+                    and i + 1 < n
+                )
+                if use_lookahead:
+                    # より多くの候補を評価してから先読みスコアで絞り込む
+                    expand = min(len(valid), beam_width * 3)
+                    scored: List[Tuple[float, float, Placement]] = []
+                    for score, new_p in valid[:expand]:
+                        future = _lookahead_score(
+                            items, i + 1, placements + [new_p],
+                            pallet, rules, score_cfg, exec_mode,
+                            fifo_lookahead, _LOOKAHEAD_WEIGHT
+                        )
+                        combined = score + _LOOKAHEAD_WEIGHT * future
+                        scored.append((combined, score, new_p))
+                    scored.sort(key=lambda t: t[0], reverse=True)
+                    for _, score, new_p in scored[:beam_width]:
+                        next_candidates.append(
+                            (placements + [new_p], placed | frozenset([i]), cum_score + score)
+                        )
+                else:
+                    for score, new_p in valid[:beam_width]:
+                        next_candidates.append(
+                            (placements + [new_p], placed | frozenset([i]), cum_score + score)
+                        )
             else:
                 next_candidates.append((placements, placed, cum_score))
 
@@ -440,10 +500,11 @@ def pack(
     exec_mode: str = "real",
     max_pallets: int = 10,
     beam_width: int = 1,
+    fifo_lookahead: int = 0,
 ) -> PackResult:
     """
     メインエントリポイント。複数パレットにわたる積付を実行する。
-    beam_width > 1 の場合はビームサーチを使用。
+    beam_width > 1 またはfifo_lookahead > 0 の場合はビームサーチを使用。
     """
     all_placements: List[Placement] = []
     unplaced_items: List[Dict[str, Any]] = []
@@ -455,10 +516,11 @@ def pack(
 
     while queue and pallet_count < max_pallets:
         pallet_count += 1
-        if beam_width > 1:
+        if beam_width > 1 or fifo_lookahead > 0:
             placements, remaining, truly_unplaceable = pack_single_pallet_beam(
                 queue, pallet, supply, rules, score_cfg, exec_mode,
-                beam_width=beam_width,
+                beam_width=max(beam_width, 1),
+                fifo_lookahead=fifo_lookahead,
             )
         else:
             placements, remaining, truly_unplaceable = pack_single_pallet(
