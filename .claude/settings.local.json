@@ -85,7 +85,14 @@
       "Bash(grep -n \"case_item.length.*>\" *.py)",
       "Bash(docker:*)",
       "Bash(docker-machine status:*)",
-      "Bash(docker-machine create:*)"
+      "Bash(docker-machine create:*)",
+      "Bash(curl -s -u admin:palletize2026 http://127.0.0.1:8000/api/logs)",
+      "Bash(curl -s -u admin:palletize2026 -X POST http://127.0.0.1:8000/api/pack -H \"Content-Type: application/json\" -d \"{\\\\\"cases\\\\\":[{\\\\\"sku_id\\\\\":\\\\\"A\\\\\",\\\\\"name\\\\\":\\\\\"ケースA\\\\\",\\\\\"length\\\\\":400,\\\\\"width\\\\\":300,\\\\\"height\\\\\":200,\\\\\"weight\\\\\":10.0,\\\\\"quantity\\\\\":5},{\\\\\"sku_id\\\\\":\\\\\"B\\\\\",\\\\\"name\\\\\":\\\\\"ケースB\\\\\",\\\\\"length\\\\\":300,\\\\\"width\\\\\":250,\\\\\"height\\\\\":150,\\\\\"weight\\\\\":3.0,\\\\\"quantity\\\\\":3,\\\\\"fragile\\\\\":true}]}\")",
+      "Bash(curl -s -u admin:palletize2026 -X POST http://127.0.0.1:8000/api/pack -H \"Content-Type: application/json\" -d @test_request.json)",
+      "Bash(curl -s -u admin:palletize2026 http://127.0.0.1:8000/api/logs/export)",
+      "Bash(wc -l \"C:\\\\Users\\\\onlyg\\\\documents\\\\claude\\\\palletize\\\\data\"/*.csv)",
+      "Bash(curl -s -u admin:palletize2026 \"http://127.0.0.1:8000/api/logs?limit=5\")",
+      "Bash(curl -s -u admin:palletize2026 \"http://127.0.0.1:8000/api/logs?limit=1\")"
     ],
     "defaultMode": "acceptEdits"
   }

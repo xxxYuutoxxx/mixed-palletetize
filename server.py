@@ -10,17 +10,19 @@ server.py — FastAPI サーバー
 from __future__ import annotations
 import os
 import secrets
+import time
 import uvicorn
 from pathlib import Path
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Depends, HTTPException, status, Query
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Optional
 
 from models import CaseItem, PalletConfig, SupplyConfig, RuleConfig, ScoreConfig
 from packer import pack
 from io_handler import result_to_dict
+from log_db import extract_case_features, insert_log, get_logs, get_log_count, export_csv
 
 app = FastAPI(title="パレタイズ積付計算システム")
 BASE_DIR = Path(__file__).parent
@@ -136,9 +138,57 @@ def api_pack(req: PackRequest):
     )
 
     beam_width = max(1, min(int(req.beam_width), 10))  # 1〜10 に制限
+
+    t0 = time.perf_counter()
     result = pack(cases, pallet, supply, rules, score_cfg,
                   exec_mode=req.exec_mode, beam_width=beam_width)
-    return result_to_dict(result, pallet)
+    calc_time_ms = (time.perf_counter() - t0) * 1000
+
+    result_dict = result_to_dict(result, pallet)
+
+    # ログ記録（失敗しても計算結果は返す）
+    try:
+        insert_log(
+            case_features=extract_case_features(req.cases),
+            supply_mode=req.supply.get("mode", "free"),
+            beam_width=beam_width,
+            exec_mode=req.exec_mode,
+            buffer_size=int(req.supply.get("buffer_size", 3)),
+            rules=req.rules,
+            scoring={
+                "w_support": sc.get("w_support", 35),
+                "w_center":  sc.get("w_center", 25),
+                "w_height":  sc.get("w_height", 20),
+                "w_void":    sc.get("w_void", 10),
+                "w_group":   sc.get("w_group", 10),
+            },
+            result=result_dict.get("summary", result_dict),
+            calc_time_ms=calc_time_ms,
+        )
+    except Exception as e:
+        print(f"[log_db] ログ記録に失敗しました: {e}")
+
+    return result_dict
+
+
+@app.get("/api/logs", dependencies=[Depends(require_auth)])
+def api_logs(limit: int = Query(default=100, ge=1, le=1000), offset: int = Query(default=0, ge=0)):
+    """蓄積された積付計算ログを返す（新しい順）。"""
+    rows = get_logs(limit=limit, offset=offset)
+    total = get_log_count()
+    return {"total": total, "limit": limit, "offset": offset, "logs": rows}
+
+
+@app.get("/api/logs/export", dependencies=[Depends(require_auth)], response_class=PlainTextResponse)
+def api_logs_export():
+    """全ログをCSV形式でダウンロードする。"""
+    csv_text = export_csv()
+    from fastapi.responses import Response
+    return Response(
+        content=csv_text.encode("utf-8-sig"),  # BOM付きUTF-8（Excel対応）
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=pack_logs.csv"},
+    )
 
 
 if __name__ == "__main__":

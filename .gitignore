@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# データベース（実行データ）
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
