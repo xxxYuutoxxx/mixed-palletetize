@@ -76,6 +76,7 @@ class ScoreConfig:
     w_void: float = 0.10      # 空隙抑制
     w_group: float = 0.10     # SKUグループ集約
     w_block: float = 0.50     # ブロック積みパターン継続（block_stacking有効時のみ使用）
+    w_overhang: float = 0.0   # オーバーハング活用（B-2モード: pack()内で自動設定）
 
 
 @dataclass

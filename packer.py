@@ -2,6 +2,7 @@
 packer.py — 貪欲法 / ビームサーチによる積付メインロジック
 """
 from __future__ import annotations
+from dataclasses import replace
 from typing import List, Tuple, Optional, Dict, Any
 from models import (
     CaseItem, PalletConfig, SupplyConfig, RuleConfig, ScoreConfig,
@@ -105,18 +106,12 @@ def get_rotations_block(
     placements: List[Placement],
 ) -> List[Tuple[int, int, int, int]]:
     """
-    ブロック積みモード用: 同一SKUが既に配置済みの場合、その回転に揃える。
-    同一SKUがまだない場合は通常の回転リストを返す。
+    ブロック積みモード用: 通常の回転候補を返す。
+    回転の強制統一は行わず、score_sku_block_continuation のスコアリングで
+    ブロック状整列を誘導する。位置によって最適な向きを選べるようにすることで、
+    行切り替え・上段積み・端の詰め込み時の非効率を防ぐ。
     """
-    same_sku = [p for p in placements if p.sku_id == case.sku_id]
-    if not same_sku:
-        return get_rotations(case)
-    # 最初に配置された同一SKUの rotation を採用
-    first_rot = same_sku[0].rotation
-    l, w, h = case.length, case.width, case.height
-    if first_rot == 90:
-        return [(w, l, h, 90)]
-    return [(l, w, h, 0)]
+    return get_rotations(case)
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +194,16 @@ def pack_single_pallet(
                     x, y, z, case_l, case_w, case_h,
                     case_item, placements, pallet, score_cfg, rules
                 )
+
+                # same_group 有効時: 既存の同品種と回転方向が揃う場合に
+                # 小さなボーナスを与えて向き統一を促す
+                if rules.same_group:
+                    same_sku = [p for p in placements if p.sku_id == case_item.sku_id]
+                    if same_sku:
+                        rots = [p.rotation for p in same_sku]
+                        majority_rot = max(set(rots), key=rots.count)
+                        if rot == majority_rot:
+                            score += 0.03
 
                 if score > best_score:
                     best_score = score
@@ -505,7 +510,17 @@ def pack(
     """
     メインエントリポイント。複数パレットにわたる積付を実行する。
     beam_width > 1 またはfifo_lookahead > 0 の場合はビームサーチを使用。
+    オーバーハングは常に有効（最低 25mm / パレット長辺）。
     """
+    # B-2: オーバーハングを常に有効化し、パレット端9%（≈99mm）まではみ出しを許容。
+    # スコアリングでもオーバーハング位置を積極的に優遇する。
+    min_oh = 0.09
+    rules = replace(rules,
+                    no_overhang=False,
+                    overhang_limit=max(rules.overhang_limit, min_oh))
+    score_cfg = replace(score_cfg,
+                        w_overhang=max(score_cfg.w_overhang, 0.20))
+
     all_placements: List[Placement] = []
     unplaced_items: List[Dict[str, Any]] = []
     pallet_count = 0

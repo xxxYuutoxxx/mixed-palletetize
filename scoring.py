@@ -81,15 +81,40 @@ def score_height_suppression(
 
 def score_void_suppression(
     x: int, y: int, z: int,
-    case_l: int, case_w: int,
+    case_l: int, case_w: int, case_h: int,
     placements: List[Placement],
     pallet: PalletConfig
 ) -> float:
     """
-    空隙抑制スコア: この位置に置くことで生じる空隙が少ないほど高い。
-    簡易版: 直下の支持面積率で代用（高支持率 = 低空隙）
+    空隙抑制スコア: 底面支持率 + 既存ボックスとの面接触を評価。
+    面接触がある位置（X/Y/Z方向に隣接）を優遇し、
+    既存ボックスの対角コーナーに配置される孤立した配置を抑制する。
     """
-    return score_support_ratio(x, y, z, case_l, case_w, placements)
+    s_bottom = score_support_ratio(x, y, z, case_l, case_w, placements)
+
+    if not placements:
+        return s_bottom
+
+    has_contact = False
+    for p in placements:
+        # X方向面接触（左右）
+        if x == p.x2 or x + case_l == p.x:
+            if y < p.y2 and y + case_w > p.y and z < p.z2 and z + case_h > p.z:
+                has_contact = True
+                break
+        # Y方向面接触（前後）
+        if y == p.y2 or y + case_w == p.y:
+            if x < p.x2 and x + case_l > p.x and z < p.z2 and z + case_h > p.z:
+                has_contact = True
+                break
+        # Z方向面接触（底面が既存ボックスの上面に接する）
+        if z == p.z2:
+            if x < p.x2 and x + case_l > p.x and y < p.y2 and y + case_w > p.y:
+                has_contact = True
+                break
+
+    s_contact = 1.0 if has_contact else 0.0
+    return (s_bottom + s_contact) / 2.0
 
 
 def score_sku_block_continuation(
@@ -154,31 +179,67 @@ def score_sku_grouping(
     SKUグループ集約スコア: 同グループのケースに近いほど高い。
     接触面の数で評価。
     """
-    if not case_item.group:
-        return 0.5  # グループなしは中立
+    # グループ未設定の場合は sku_id をグループキーとして使用
+    group_key = case_item.group if case_item.group else case_item.sku_id
 
+    same_group_placements = [
+        p for p in placements
+        if (p.group if p.group else p.sku_id) == group_key
+    ]
+
+    # ── 段(tier)スコア ──────────────────────────────────────────
+    # 同品種が未配置 → 中立
+    # 同品種が同じ段(z)に存在 → 高スコア（横方向に広げる）
+    # 同品種が違う段にしかない → 低スコア（段が違う = 同一段優先に反する）
+    if not same_group_placements:
+        tier_score = 0.5
+    elif any(p.z == z for p in same_group_placements):
+        tier_score = 0.9   # 同じ段に同品種あり: 強く優遇
+    else:
+        tier_score = 0.1   # 違う段にしかない: 強く抑制
+
+    # ── 水平隣接スコア ───────────────────────────────────────────
+    # Z方向（真上・真下）は除外し、XY方向の隣接のみ評価
     touches = 0
     total_neighbors = 0
-
     for p in placements:
         x_adj = (x == p.x2 or x + case_l == p.x)
         y_adj = (y == p.y2 or y + case_w == p.y)
-        z_adj = (z == p.z2 or z + case_h == p.z)
-
-        xy_ov = x < p.x2 and x + case_l > p.x and y < p.y2 and y + case_w > p.y
         xz_ov = x < p.x2 and x + case_l > p.x and z < p.z2 and z + case_h > p.z
         yz_ov = y < p.y2 and y + case_w > p.y and z < p.z2 and z + case_h > p.z
-
-        is_adjacent = (x_adj and yz_ov) or (y_adj and xz_ov) or (z_adj and xy_ov)
-
-        if is_adjacent:
+        if (x_adj and yz_ov) or (y_adj and xz_ov):
             total_neighbors += 1
-            if p.group == case_item.group:
+            p_group = p.group if p.group else p.sku_id
+            if p_group == group_key:
                 touches += 1
 
     if total_neighbors == 0:
-        return 0.5
-    return touches / total_neighbors
+        adj_score = 0.5
+    elif touches == 0:
+        adj_score = 0.3  # 全隣接が異品種: 軽微なペナルティ
+    else:
+        adj_score = touches / total_neighbors
+
+    # 段スコアを主、隣接スコアを副として合成
+    # 同品種同一段上でさらに同品種に隣接すれば最高スコア(1.0)
+    if tier_score == 0.9 and total_neighbors > 0 and touches > 0:
+        return min(1.0, 0.9 + 0.1 * (touches / total_neighbors))
+    return 0.7 * tier_score + 0.3 * adj_score
+
+
+def score_overhang_use(
+    x: int, y: int,
+    case_l: int, case_w: int,
+    pallet: PalletConfig
+) -> float:
+    """
+    オーバーハング活用スコア: 実際にパレット端を超える配置を優遇。
+    1辺でもはみ出していれば 1.0、パレット内に収まる場合は 0.0。
+    """
+    if (x < 0 or y < 0 or
+            x + case_l > pallet.length or y + case_w > pallet.width):
+        return 1.0
+    return 0.0
 
 
 def compute_score(
@@ -205,9 +266,10 @@ def compute_score(
     else:
         s_height = score_height_suppression(z, case_h, pallet)
 
-    s_void = score_void_suppression(x, y, z, case_l, case_w, placements, pallet)
+    s_void = score_void_suppression(x, y, z, case_l, case_w, case_h, placements, pallet)
     s_group = score_sku_grouping(x, y, z, case_l, case_w, case_h, case_item, placements)
     s_block = score_sku_block_continuation(x, y, z, case_l, case_w, case_item, placements)
+    s_overhang = score_overhang_use(x, y, case_l, case_w, pallet)
 
     # center vs outer は排他
     if rules.center_priority:
@@ -219,26 +281,28 @@ def compute_score(
                       score_outer_wall(x, y, case_l, case_w, pallet)) / 2
 
     # 重みを正規化して合計が常に 1.0 になるようにする
-    w_support = score_cfg.w_support
-    w_center  = score_cfg.w_center
-    w_height  = score_cfg.w_height
-    w_void    = score_cfg.w_void
-    w_group   = score_cfg.w_group if rules.same_group else 0.0
-    w_block   = score_cfg.w_block if rules.block_stacking else 0.0
+    w_support  = score_cfg.w_support
+    w_center   = score_cfg.w_center
+    w_height   = score_cfg.w_height
+    w_void     = score_cfg.w_void
+    w_group    = score_cfg.w_group if rules.same_group else 0.0
+    w_block    = score_cfg.w_block if rules.block_stacking else 0.0
+    w_overhang = score_cfg.w_overhang
 
-    total_w = w_support + w_center + w_height + w_void + w_group + w_block
+    total_w = w_support + w_center + w_height + w_void + w_group + w_block + w_overhang
     if total_w > 0:
         norm = 1.0 / total_w
     else:
         norm = 0.0
 
     score = (
-        s_support  * w_support * norm +
-        s_position * w_center  * norm +
-        s_height   * w_height  * norm +
-        s_void     * w_void    * norm +
-        s_group    * w_group   * norm +
-        s_block    * w_block   * norm
+        s_support  * w_support  * norm +
+        s_position * w_center   * norm +
+        s_height   * w_height   * norm +
+        s_void     * w_void     * norm +
+        s_group    * w_group    * norm +
+        s_block    * w_block    * norm +
+        s_overhang * w_overhang * norm
     )
 
     total = min(1.0, max(0.0, score))

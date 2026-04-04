@@ -92,7 +92,10 @@
       "Bash(curl -s -u admin:palletize2026 http://127.0.0.1:8000/api/logs/export)",
       "Bash(wc -l \"C:\\\\Users\\\\onlyg\\\\documents\\\\claude\\\\palletize\\\\data\"/*.csv)",
       "Bash(curl -s -u admin:palletize2026 \"http://127.0.0.1:8000/api/logs?limit=5\")",
-      "Bash(curl -s -u admin:palletize2026 \"http://127.0.0.1:8000/api/logs?limit=1\")"
+      "Bash(curl -s -u admin:palletize2026 \"http://127.0.0.1:8000/api/logs?limit=1\")",
+      "Bash(findstr :8000)",
+      "Bash(cmd:*)",
+      "Bash(wait)"
     ],
     "defaultMode": "acceptEdits"
   }
