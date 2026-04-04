@@ -67,6 +67,7 @@ def parse_input(data: Dict[str, Any]):
         outer_priority=bool(r.get("outer_priority", False)),
         stack_priority=bool(r.get("stack_priority", False)),
         no_overhang=bool(r.get("no_overhang", True)),
+        layer_first=bool(r.get("layer_first", False)),
         temp_separate=bool(r.get("temp_separate", False)),
         overhang_limit=float(r.get("overhang_limit", 0.0)),
         support_ratio_min=float(r.get("support_ratio_min", 0.7)),

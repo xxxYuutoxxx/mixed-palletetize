@@ -95,7 +95,9 @@
       "Bash(curl -s -u admin:palletize2026 \"http://127.0.0.1:8000/api/logs?limit=1\")",
       "Bash(findstr :8000)",
       "Bash(cmd:*)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(pkill -f \"python server.py\")",
+      "Bash(curl -s http://localhost:8000/ -o /dev/null -w \"%{http_code}\")"
     ],
     "defaultMode": "acceptEdits"
   }

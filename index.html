@@ -861,6 +861,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
               </label>
               <label class="constraint-item"><input type="checkbox" id="cbTempSeparate" class="constraint-chk"        onchange="checkConflicts()"> 温度帯混載禁止</label>
               <label class="constraint-item"><input type="checkbox" id="cbBlockStacking" class="constraint-chk"       onchange="checkConflicts()"> 同一品種ブロック積み優先（面積み）</label>
+              <label class="constraint-item"><input type="checkbox" id="cbLayerFirst"    class="constraint-chk"       onchange="checkConflicts()"> 面積み優先（層を埋めてから上段へ）</label>
             </div>
           </div>
         </div>
@@ -1745,6 +1746,7 @@ function runCalc() {
       temp_separate:   !!(document.getElementById('cbTempSeparate')   || {}).checked,
       height_tolerance: parseInt((document.getElementById('heightTolerance') || {value:'0'}).value) || 0,
       block_stacking:  !!(document.getElementById('cbBlockStacking')  || {}).checked,
+      layer_first:     !!(document.getElementById('cbLayerFirst')     || {}).checked,
       support_ratio_min: parseFloat((document.getElementById('aiSupportRatioMin') || {value:'0.7'}).value) || 0.7,
     },
     scoring: {
@@ -1954,6 +1956,7 @@ function applyAISettings(rec) {
     outer_priority:  'cbOuterPrio',
     stack_priority:  'cbStackPriority',
     block_stacking:  'cbBlockStacking',
+    layer_first:     'cbLayerFirst',
     same_group:      'cbSameGroup',
     center_priority: 'cbCenterPrio',
   };
@@ -2423,7 +2426,8 @@ function computeDummyResults(cases) {
     cbFragileTop:'Fragile品上載禁止', cbHeavyBottom:'重量物下段優先',
     cbSameGroup:'同品種同一段優先', cbCenterPrio:'中心寄せ優先',
     cbStackPriority:'段積み優先', cbNoOverhang:'オーバーハング禁止',
-    cbTempSeparate:'温度帯混載禁止', cbBlockStacking:'ブロック積み優先'
+    cbTempSeparate:'温度帯混載禁止', cbBlockStacking:'ブロック積み優先',
+    cbLayerFirst:'面積み優先'
   };
   Object.keys(constraintMap).forEach(function(id) {
     var el = document.getElementById(id);

@@ -227,6 +227,24 @@ def score_sku_grouping(
     return 0.7 * tier_score + 0.3 * adj_score
 
 
+def score_layer_fill(
+    z: int,
+    placements: List[Placement],
+    pallet: PalletConfig
+) -> float:
+    """
+    面積みスコア: 現在アクティブな最下層を優先して水平展開。
+    z が配置済み最小 z 以下なら 1.0、上段ほど急減。
+    """
+    if not placements:
+        return 1.0
+    min_z = min(p.z for p in placements)
+    if z <= min_z:
+        return 1.0
+    z_ratio = (z - min_z) / max(1, pallet.effective_height)
+    return max(0.0, 1.0 - z_ratio * 5)
+
+
 def score_overhang_use(
     x: int, y: int,
     case_l: int, case_w: int,
@@ -270,6 +288,7 @@ def compute_score(
     s_group = score_sku_grouping(x, y, z, case_l, case_w, case_h, case_item, placements)
     s_block = score_sku_block_continuation(x, y, z, case_l, case_w, case_item, placements)
     s_overhang = score_overhang_use(x, y, case_l, case_w, pallet)
+    s_layer = score_layer_fill(z, placements, pallet)
 
     # center vs outer は排他
     if rules.center_priority:
@@ -288,8 +307,9 @@ def compute_score(
     w_group    = score_cfg.w_group if rules.same_group else 0.0
     w_block    = score_cfg.w_block if rules.block_stacking else 0.0
     w_overhang = score_cfg.w_overhang
+    w_layer    = 0.6 if rules.layer_first else 0.0
 
-    total_w = w_support + w_center + w_height + w_void + w_group + w_block + w_overhang
+    total_w = w_support + w_center + w_height + w_void + w_group + w_block + w_overhang + w_layer
     if total_w > 0:
         norm = 1.0 / total_w
     else:
@@ -302,7 +322,8 @@ def compute_score(
         s_void     * w_void     * norm +
         s_group    * w_group    * norm +
         s_block    * w_block    * norm +
-        s_overhang * w_overhang * norm
+        s_overhang * w_overhang * norm +
+        s_layer    * w_layer    * norm
     )
 
     total = min(1.0, max(0.0, score))

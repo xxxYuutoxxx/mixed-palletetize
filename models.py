@@ -57,6 +57,7 @@ class RuleConfig:
     outer_priority: bool = False   # 外壁沿い優先
     stack_priority: bool = False   # 縦積み優先
     no_overhang: bool = True       # はみ出し禁止
+    layer_first: bool = False      # 面積み優先（現在層を埋めてから上段へ）
     temp_separate: bool = False    # 温度帯分離
     overhang_limit: float = 0.0    # 許容はみ出し率 0.0〜0.3
     support_ratio_min: float = 0.7 # 最小支持率
