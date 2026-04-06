@@ -922,6 +922,11 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
         <input type="range" id="weight_grouping" min="0" max="100" value="30">
         <div class="slider-val" id="wlabel_grouping">30%</div>
       </div>
+      <div class="slider-row">
+        <div class="slider-label">側面接触重視</div>
+        <input type="range" id="weight_lateral" min="0" max="100" value="0">
+        <div class="slider-val" id="wlabel_lateral">0%</div>
+      </div>
       <div style="margin-top:14px;">
         <div style="font-size:11px;color:#8a9ab0;margin-bottom:5px;">各重みの比率（合計比）</div>
         <div class="weight-bar" id="weightBar"></div>
@@ -930,6 +935,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
           <span style="font-size:11px;display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:#2ecc71;border-radius:2px;"></span>安定性</span>
           <span style="font-size:11px;display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:#e67e22;border-radius:2px;"></span>高さ抑制</span>
           <span style="font-size:11px;display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:#9b59b6;border-radius:2px;"></span>同品種集約</span>
+          <span style="font-size:11px;display:flex;align-items:center;gap:4px;"><span style="display:inline-block;width:10px;height:10px;background:#1abc9c;border-radius:2px;"></span>側面接触</span>
         </div>
       </div>
     </div>
@@ -1754,7 +1760,8 @@ function runCalc() {
       w_center:  parseInt((document.getElementById('weight_loadRate')   || {value:'50'}).value) || 50,
       w_height:  parseInt((document.getElementById('weight_height')     || {value:'30'}).value) || 30,
       w_void:    20,
-      w_group:   parseInt((document.getElementById('weight_grouping')   || {value:'30'}).value) || 30
+      w_group:   parseInt((document.getElementById('weight_grouping')   || {value:'30'}).value) || 30,
+      w_lateral: parseInt((document.getElementById('weight_lateral')    || {value:'0'}).value)  || 0
     },
     exec_mode: execMode,
     beam_width: parseInt((document.getElementById('searchModeSelect') || {value:'1'}).value) || 1,
@@ -2014,16 +2021,16 @@ function updateWeightLabel(k) {
 }
 
 function updateWeightBar() {
-  var keys = ['loadRate','stability','height','grouping'];
+  var keys = ['loadRate','stability','height','grouping','lateral'];
   var vals = keys.map(function(k) { return parseInt(document.getElementById('weight_' + k).value) || 0; });
   var total = vals.reduce(function(a,b){return a+b;}, 0) || 1;
-  var colors = ['#3498db','#2ecc71','#e67e22','#9b59b6'];
+  var colors = ['#3498db','#2ecc71','#e67e22','#9b59b6','#1abc9c'];
   var bar = document.getElementById('weightBar');
   bar.innerHTML = '';
   keys.forEach(function(k, i) {
     var seg = document.createElement('div');
     seg.style.cssText = 'width:' + (vals[i]/total*100) + '%;background:' + colors[i] + ';height:100%;display:inline-block;';
-    seg.title = ['積載率','安定性','高さ抑制','集約'][i] + ': ' + vals[i] + '%';
+    seg.title = ['積載率','安定性','高さ抑制','集約','側面接触'][i] + ': ' + vals[i] + '%';
     bar.appendChild(seg);
   });
 }
@@ -2827,7 +2834,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   /* slider live */
-  ['loadRate','stability','height','grouping'].forEach(function(k) {
+  ['loadRate','stability','height','grouping','lateral'].forEach(function(k) {
     var s = document.getElementById('weight_' + k);
     s.addEventListener('input', function() { updateWeightLabel(k); updateWeightBar(); });
   });

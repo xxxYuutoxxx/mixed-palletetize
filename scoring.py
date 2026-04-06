@@ -260,6 +260,65 @@ def score_overhang_use(
     return 0.0
 
 
+def score_lateral_contact(
+    x: int, y: int, z: int,
+    case_l: int, case_w: int, case_h: int,
+    placements: List[Placement],
+    pallet: PalletConfig
+) -> float:
+    """
+    水平側面接触スコア: ケースの4側面（X+/X-/Y+/Y-）のうち、
+    隣接する配置済みケースまたはパレット壁に接している面の割合。
+    搬送中の棒積み荷崩れ防止を目的とする。
+      1.0: 全4面が接触（または壁）
+      0.75: 3面接触
+      0.5: 2面接触
+      0.25: 1面接触
+      0.0: 全く接触なし
+    """
+    contact_count = 0
+
+    # パレット壁との接触
+    if x == 0:
+        contact_count += 1
+    if x + case_l == pallet.length:
+        contact_count += 1
+    if y == 0:
+        contact_count += 1
+    if y + case_w == pallet.width:
+        contact_count += 1
+
+    # 既存ケースとの側面接触（Z方向に重なりがある場合のみカウント）
+    x_min_touched = (x == 0)
+    x_max_touched = (x + case_l == pallet.length)
+    y_min_touched = (y == 0)
+    y_max_touched = (y + case_w == pallet.width)
+
+    for p in placements:
+        z_overlap = z < p.z2 and z + case_h > p.z
+        if not z_overlap:
+            continue
+        # X- 面（ケース左面）に右端が接触
+        if not x_min_touched and p.x2 == x:
+            if y < p.y2 and y + case_w > p.y:
+                x_min_touched = True
+        # X+ 面（ケース右面）に左端が接触
+        if not x_max_touched and p.x == x + case_l:
+            if y < p.y2 and y + case_w > p.y:
+                x_max_touched = True
+        # Y- 面（ケース前面）に後端が接触
+        if not y_min_touched and p.y2 == y:
+            if x < p.x2 and x + case_l > p.x:
+                y_min_touched = True
+        # Y+ 面（ケース後面）に前端が接触
+        if not y_max_touched and p.y == y + case_w:
+            if x < p.x2 and x + case_l > p.x:
+                y_max_touched = True
+
+    contact_count = sum([x_min_touched, x_max_touched, y_min_touched, y_max_touched])
+    return contact_count / 4.0
+
+
 def compute_score(
     x: int, y: int, z: int,
     case_l: int, case_w: int, case_h: int,
@@ -289,6 +348,7 @@ def compute_score(
     s_block = score_sku_block_continuation(x, y, z, case_l, case_w, case_item, placements)
     s_overhang = score_overhang_use(x, y, case_l, case_w, pallet)
     s_layer = score_layer_fill(z, placements, pallet)
+    s_lateral = score_lateral_contact(x, y, z, case_l, case_w, case_h, placements, pallet)
 
     # center vs outer は排他
     if rules.center_priority:
@@ -308,8 +368,9 @@ def compute_score(
     w_block    = score_cfg.w_block if rules.block_stacking else 0.0
     w_overhang = score_cfg.w_overhang
     w_layer    = 0.6 if rules.layer_first else 0.0
+    w_lateral  = score_cfg.w_lateral
 
-    total_w = w_support + w_center + w_height + w_void + w_group + w_block + w_overhang + w_layer
+    total_w = w_support + w_center + w_height + w_void + w_group + w_block + w_overhang + w_layer + w_lateral
     if total_w > 0:
         norm = 1.0 / total_w
     else:
@@ -323,17 +384,19 @@ def compute_score(
         s_group    * w_group    * norm +
         s_block    * w_block    * norm +
         s_overhang * w_overhang * norm +
-        s_layer    * w_layer    * norm
+        s_layer    * w_layer    * norm +
+        s_lateral  * w_lateral  * norm
     )
 
     total = min(1.0, max(0.0, score))
     breakdown = ScoreBreakdown(
-        support_score=round(s_support,  4),
-        center_score =round(s_position, 4),
-        height_score =round(s_height,   4),
-        void_score   =round(s_void,     4),
-        group_score  =round(s_group,    4),
-        block_score  =round(s_block,    4),
-        total_score  =round(total,      4),
+        support_score =round(s_support,  4),
+        center_score  =round(s_position, 4),
+        height_score  =round(s_height,   4),
+        void_score    =round(s_void,     4),
+        group_score   =round(s_group,    4),
+        block_score   =round(s_block,    4),
+        lateral_score =round(s_lateral,  4),
+        total_score   =round(total,      4),
     )
     return total, breakdown

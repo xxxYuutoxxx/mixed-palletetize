@@ -125,7 +125,8 @@ def api_pack(req: PackRequest):
     sc = req.scoring
     total_w = sum([
         sc.get("w_support", 35), sc.get("w_center", 25),
-        sc.get("w_height", 20), sc.get("w_void", 10), sc.get("w_group", 10)
+        sc.get("w_height", 20), sc.get("w_void", 10),
+        sc.get("w_group", 10),  sc.get("w_lateral", 0),
     ])
     def norm(v):
         return float(v) / total_w if total_w > 0 else 0.0
@@ -136,6 +137,7 @@ def api_pack(req: PackRequest):
         w_height=norm(sc.get("w_height", 20)),
         w_void=norm(sc.get("w_void", 10)),
         w_group=norm(sc.get("w_group", 10)),
+        w_lateral=norm(sc.get("w_lateral", 0)),
         w_block=float(sc.get("w_block", 0.50)),  # ブロック積み重みは別途正規化
     )
 

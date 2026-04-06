@@ -78,6 +78,7 @@ class ScoreConfig:
     w_group: float = 0.10     # SKUグループ集約
     w_block: float = 0.50     # ブロック積みパターン継続（block_stacking有効時のみ使用）
     w_overhang: float = 0.0   # オーバーハング活用（B-2モード: pack()内で自動設定）
+    w_lateral: float = 0.0    # 水平側面接触スコア（棒積み隙間防止）
 
 
 @dataclass
@@ -89,17 +90,19 @@ class ScoreBreakdown:
     void_score: float = 0.0
     group_score: float = 0.0
     block_score: float = 0.0
+    lateral_score: float = 0.0
     total_score: float = 0.0
 
     def to_dict(self) -> Dict[str, float]:
         return {
-            "support_score": round(self.support_score, 3),
-            "center_score":  round(self.center_score,  3),
-            "height_score":  round(self.height_score,  3),
-            "void_score":    round(self.void_score,    3),
-            "group_score":   round(self.group_score,   3),
-            "block_score":   round(self.block_score,   3),
-            "total_score":   round(self.total_score,   3),
+            "support_score":  round(self.support_score,  3),
+            "center_score":   round(self.center_score,   3),
+            "height_score":   round(self.height_score,   3),
+            "void_score":     round(self.void_score,     3),
+            "group_score":    round(self.group_score,    3),
+            "block_score":    round(self.block_score,    3),
+            "lateral_score":  round(self.lateral_score,  3),
+            "total_score":    round(self.total_score,    3),
         }
 
 
