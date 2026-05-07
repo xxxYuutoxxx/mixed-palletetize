@@ -2592,7 +2592,7 @@ function applyRealResults(data, cases) {
   document.getElementById('appliedRulesList').innerHTML = ruleItems.join('') +
     (ruleHtml.length > 0 ? '<div style="font-size:11px;color:#8a9ab0;margin:8px 0 4px;font-weight:700;">有効な積付制約</div>' + ruleHtml.join('') : '');
 
-  /* ── Tier table (Z段ごとにグループ化) ── */
+  /* ── Tier table (Z段ごとにグループ化・品種集約) ── */
   var tbody = document.getElementById('tierBody');
   tbody.innerHTML = '';
   var zGroups = {};
@@ -2603,14 +2603,23 @@ function applyRealResults(data, cases) {
   });
   var tierNum = 1;
   Object.keys(zGroups).sort(function(a,b) { return parseInt(a)-parseInt(b); }).forEach(function(z) {
-    zGroups[z].forEach(function(p) {
+    var group = zGroups[z];
+    // 同段内を品種ごとに集約
+    var skuMap = {};
+    group.forEach(function(p) {
+      if (!skuMap[p.sku_id]) skuMap[p.sku_id] = { name: p.name, color: p.color, count: 0, height: p.height };
+      skuMap[p.sku_id].count++;
+    });
+    Object.keys(skuMap).forEach(function(skuId) {
+      var s = skuMap[skuId];
       var tr = document.createElement('tr');
-      tr.innerHTML = '<td><span class="tier-badge">' + tierNum++ + '</span></td>' +
-        '<td>' + escHtml(p.sku_id) + '</td>' +
-        '<td><span class="color-dot" style="background:' + p.color + '"></span>' + escHtml(p.name) + '</td>' +
-        '<td>1×1</td><td>1</td><td>' + p.height + '</td>';
+      tr.innerHTML = '<td><span class="tier-badge">' + tierNum + '</span></td>' +
+        '<td>' + escHtml(skuId) + '</td>' +
+        '<td><span class="color-dot" style="background:' + s.color + '"></span>' + escHtml(s.name) + '</td>' +
+        '<td>—</td><td>' + s.count + '</td><td>' + s.height + '</td>';
       tbody.appendChild(tr);
     });
+    tierNum++;
   });
 
   /* ── Placement table ── */
