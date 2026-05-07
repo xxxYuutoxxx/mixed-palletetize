@@ -1126,7 +1126,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
             <table class="tier-table">
               <thead>
                 <tr>
-                  <th>段</th><th>品番</th><th>品名</th><th>列×行</th><th>ケース数</th><th>高さmm</th>
+                  <th>段</th><th>品番</th><th>品名</th><th>座標(X,Y)</th><th>回転</th><th>高さmm</th>
                 </tr>
               </thead>
               <tbody id="tierBody"></tbody>
@@ -2592,34 +2592,27 @@ function applyRealResults(data, cases) {
   document.getElementById('appliedRulesList').innerHTML = ruleItems.join('') +
     (ruleHtml.length > 0 ? '<div style="font-size:11px;color:#8a9ab0;margin:8px 0 4px;font-weight:700;">有効な積付制約</div>' + ruleHtml.join('') : '');
 
-  /* ── Tier table (Z段ごとにグループ化・品種集約) ── */
+  /* ── Tier table (1ケース1行・Z高さで段番号を決定) ── */
   var tbody = document.getElementById('tierBody');
   tbody.innerHTML = '';
   var zGroups = {};
   placements.forEach(function(p) {
-    var key = p.z;
-    if (!zGroups[key]) zGroups[key] = [];
-    zGroups[key].push(p);
+    if (!zGroups[p.z]) zGroups[p.z] = [];
+    zGroups[p.z].push(p);
   });
-  var tierNum = 1;
-  Object.keys(zGroups).sort(function(a,b) { return parseInt(a)-parseInt(b); }).forEach(function(z) {
-    var group = zGroups[z];
-    // 同段内を品種ごとに集約
-    var skuMap = {};
-    group.forEach(function(p) {
-      if (!skuMap[p.sku_id]) skuMap[p.sku_id] = { name: p.name, color: p.color, count: 0, height: p.height };
-      skuMap[p.sku_id].count++;
-    });
-    Object.keys(skuMap).forEach(function(skuId) {
-      var s = skuMap[skuId];
-      var tr = document.createElement('tr');
-      tr.innerHTML = '<td><span class="tier-badge">' + tierNum + '</span></td>' +
-        '<td>' + escHtml(skuId) + '</td>' +
-        '<td><span class="color-dot" style="background:' + s.color + '"></span>' + escHtml(s.name) + '</td>' +
-        '<td>—</td><td>' + s.count + '</td><td>' + s.height + '</td>';
-      tbody.appendChild(tr);
-    });
-    tierNum++;
+  var sortedZs = Object.keys(zGroups).map(Number).sort(function(a,b){ return a-b; });
+  var zToTier = {};
+  sortedZs.forEach(function(z, idx) { zToTier[z] = idx + 1; });
+  placements.forEach(function(p) {
+    var tier = zToTier[p.z] || 1;
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td><span class="tier-badge">' + tier + '段</span></td>' +
+      '<td>' + escHtml(p.sku_id) + '</td>' +
+      '<td><span class="color-dot" style="background:' + p.color + '"></span>' + escHtml(p.name) + '</td>' +
+      '<td>' + p.x + ',' + p.y + '</td>' +
+      '<td>' + (p.rotation === 90 ? '90°' : '正置') + '</td>' +
+      '<td>' + p.height + '</td>';
+    tbody.appendChild(tr);
   });
 
   /* ── Placement table ── */
