@@ -152,6 +152,20 @@ def api_pack(req: PackRequest):
 
     result_dict = result_to_dict(result, pallet)
 
+    # オーバーハングデバッグ
+    oh_violations = [
+        f"  pallet_id={p.pallet_id} sku={p.sku_id} x={p.x}+{p.length}={p.x+p.length}>{pallet.length} or y={p.y}+{p.width}={p.y+p.width}>{pallet.width}"
+        for p in result.placements
+        if p.x + p.length > pallet.length or p.y + p.width > pallet.width or p.x < 0 or p.y < 0
+    ]
+    print(f"[DEBUG] overhang_limit={rules.overhang_limit}, pallet={pallet.length}x{pallet.width}")
+    if oh_violations:
+        print(f"[DEBUG] OVERHANG DETECTED ({len(oh_violations)} cases):")
+        for v in oh_violations[:5]:
+            print(v)
+    else:
+        print("[DEBUG] No overhang violations in placements.")
+
     # ログ記録（失敗しても計算結果は返す）
     try:
         insert_log(

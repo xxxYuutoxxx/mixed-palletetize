@@ -510,16 +510,7 @@ def pack(
     """
     メインエントリポイント。複数パレットにわたる積付を実行する。
     beam_width > 1 またはfifo_lookahead > 0 の場合はビームサーチを使用。
-    オーバーハングは常に有効（最低 25mm / パレット長辺）。
     """
-    # B-2: オーバーハングを常に有効化し、パレット端9%（≈99mm）まではみ出しを許容。
-    # スコアリングでもオーバーハング位置を積極的に優遇する。
-    min_oh = 0.09
-    rules = replace(rules,
-                    no_overhang=False,
-                    overhang_limit=max(rules.overhang_limit, min_oh))
-    score_cfg = replace(score_cfg,
-                        w_overhang=max(score_cfg.w_overhang, 0.20))
 
     all_placements: List[Placement] = []
     unplaced_items: List[Dict[str, Any]] = []

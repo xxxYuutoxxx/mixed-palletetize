@@ -278,6 +278,9 @@ def run_all_checks(
         if case_item.support_ratio_required > 0
         else rules.support_ratio_min
     )
+    # no_overhang=True 時はケース間オーバーハングも禁止（完全支持を要求）
+    if rules.no_overhang:
+        support_min = 1.0
 
     checks = [
         ("pallet_bounds", check_pallet_bounds(
