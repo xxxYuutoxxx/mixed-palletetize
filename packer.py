@@ -512,6 +512,10 @@ def pack(
     beam_width > 1 またはfifo_lookahead > 0 の場合はビームサーチを使用。
     """
 
+    # overhang_limit > 0 の場合、オーバーハング活用スコアを有効化
+    if rules.overhang_limit > 0:
+        score_cfg = replace(score_cfg, w_overhang=max(score_cfg.w_overhang, 0.20))
+
     all_placements: List[Placement] = []
     unplaced_items: List[Dict[str, Any]] = []
     pallet_count = 0
