@@ -1252,9 +1252,9 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
               <span class="warning-icon">✓</span>
               <span>重心偏り <span id="warnCG">—</span>mm — 許容値内</span>
             </div>
-            <div class="warning-item warning-warn">
-              <span class="warning-icon">⚠</span>
-              <span>Fragile品が最上段以外にも配置されています — 積付禁止段条件を確認してください</span>
+            <div id="warnFragile" class="warning-item warning-ok" style="display:none;">
+              <span class="warning-icon" id="warnFragileIcon">✓</span>
+              <span id="warnFragileMsg">Fragile品はすべて最上段に配置されています</span>
             </div>
             <div class="warning-item warning-ok">
               <span class="warning-icon">✓</span>
@@ -2494,6 +2494,8 @@ function computeDummyResults(cases) {
   document.getElementById('warnCG').textContent = dev;
   document.getElementById('stabilityScoreDisplay').textContent = stab + '点';
   document.getElementById('stabilityScoreDisplay').style.color = stab >= 80 ? '#27ae60' : stab >= 60 ? '#e67e22' : '#e74c3c';
+  var wfEl = document.getElementById('warnFragile');
+  if (wfEl) wfEl.style.display = 'none';
 
   /* explanation */
   var modeExp = {
@@ -2642,6 +2644,28 @@ function applyRealResults(data, cases) {
   document.getElementById('warnCG').textContent = dev;
   document.getElementById('stabilityScoreDisplay').textContent = stab + '点';
   document.getElementById('stabilityScoreDisplay').style.color = stab >= 80 ? '#27ae60' : stab >= 60 ? '#e67e22' : '#e74c3c';
+
+  /* ── Fragile warning ── */
+  var fragilePlacements = placements.filter(function(p) { return p.fragile; });
+  var warnFragileEl = document.getElementById('warnFragile');
+  if (warnFragileEl) {
+    if (fragilePlacements.length === 0) {
+      warnFragileEl.style.display = 'none';
+    } else {
+      var maxZ = Math.max.apply(null, placements.map(function(p) { return p.z; }));
+      var nonTop = fragilePlacements.filter(function(p) { return p.z < maxZ; });
+      warnFragileEl.style.display = '';
+      if (nonTop.length > 0) {
+        warnFragileEl.className = 'warning-item warning-warn';
+        document.getElementById('warnFragileIcon').textContent = '⚠';
+        document.getElementById('warnFragileMsg').textContent = 'Fragile品が最上段以外にも配置されています — 積付禁止段条件を確認してください';
+      } else {
+        warnFragileEl.className = 'warning-item warning-ok';
+        document.getElementById('warnFragileIcon').textContent = '✓';
+        document.getElementById('warnFragileMsg').textContent = 'Fragile品はすべて最上段に配置されています';
+      }
+    }
+  }
 
   /* ── Explanation ── */
   document.getElementById('explanationText').textContent =
