@@ -2601,8 +2601,18 @@ function applyRealResults(data, cases) {
     zGroups[p.z].push(p);
   });
   var sortedZs = Object.keys(zGroups).map(Number).sort(function(a,b){ return a-b; });
+  // ケース高さの中央値を求め、その50%を段の切れ目判定閾値とする
+  var heights = placements.map(function(p){ return p.height; }).sort(function(a,b){return a-b;});
+  var medH = heights[Math.floor(heights.length/2)] || 300;
+  var threshold = medH * 0.5;
   var zToTier = {};
-  sortedZs.forEach(function(z, idx) { zToTier[z] = idx + 1; });
+  var tierCount = 1;
+  var prevZ = null;
+  sortedZs.forEach(function(z) {
+    if (prevZ !== null && (z - prevZ) > threshold) tierCount++;
+    zToTier[z] = tierCount;
+    prevZ = z;
+  });
   placements.forEach(function(p) {
     var tier = zToTier[p.z] || 1;
     var tr = document.createElement('tr');
@@ -2623,7 +2633,7 @@ function applyRealResults(data, cases) {
     tr.innerHTML = '<td>' + (i+1) + '</td>' +
       '<td>' + escHtml(p.sku_id) + '</td>' +
       '<td>' + escHtml(p.name) + '</td>' +
-      '<td>' + (Object.keys(zGroups).sort(function(a,b){return parseInt(a)-parseInt(b);}).indexOf(String(p.z))+1) + '段</td>' +
+      '<td>' + (zToTier[p.z] || 1) + '段</td>' +
       '<td>X:' + p.x + 'mm / Y:' + p.y + 'mm</td>' +
       '<td>' + (p.rotation === 90 ? '90°回転' : '正置き') + '</td><td>—</td>';
     placeTbody.appendChild(tr);
