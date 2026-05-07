@@ -99,7 +99,8 @@
       "Bash(pkill -f \"python server.py\")",
       "Bash(curl -s http://localhost:8000/ -o /dev/null -w \"%{http_code}\")",
       "Bash(curl -s -u admin:palletize2026 \"http://127.0.0.1:8000/api/logs?limit=1208\")",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "PowerShell(Get-Process *)"
     ],
     "defaultMode": "acceptEdits"
   }
