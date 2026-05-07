@@ -2592,29 +2592,36 @@ function applyRealResults(data, cases) {
   document.getElementById('appliedRulesList').innerHTML = ruleItems.join('') +
     (ruleHtml.length > 0 ? '<div style="font-size:11px;color:#8a9ab0;margin:8px 0 4px;font-weight:700;">有効な積付制約</div>' + ruleHtml.join('') : '');
 
-  /* ── Tier table (1ケース1行・Z高さで段番号を決定) ── */
+  /* ── Tier table (1ケース1行・サポートチェーンで段番号を決定) ── */
   var tbody = document.getElementById('tierBody');
   tbody.innerHTML = '';
+  // 各ケースの段番号をサポートチェーンで計算
+  // tier[i] = 直下（z2==p.z かつXY重なり）の最大tier + 1。z=0は1段
+  var tierArr = new Array(placements.length).fill(0);
+  var idxByZ = placements.map(function(_,i){ return i; })
+    .sort(function(a,b){ return placements[a].z - placements[b].z; });
+  idxByZ.forEach(function(i) {
+    var p = placements[i];
+    if (p.z === 0) { tierArr[i] = 1; return; }
+    var maxT = 0;
+    placements.forEach(function(q, j) {
+      if (q.z + q.height === p.z &&
+          q.x < p.x + p.length && q.x + q.length > p.x &&
+          q.y < p.y + p.width  && q.y + q.width  > p.y) {
+        if (tierArr[j] > maxT) maxT = tierArr[j];
+      }
+    });
+    tierArr[i] = maxT > 0 ? maxT + 1 : 1;
+  });
+  // zToTier は配置テーブル側でも使えるよう index→tier のマップとして保持
+  var zToTier = {}; // 後方互換のため残す（配置テーブル側はtierArrを使う）
   var zGroups = {};
   placements.forEach(function(p) {
     if (!zGroups[p.z]) zGroups[p.z] = [];
     zGroups[p.z].push(p);
   });
-  var sortedZs = Object.keys(zGroups).map(Number).sort(function(a,b){ return a-b; });
-  // ケース高さの中央値を求め、その50%を段の切れ目判定閾値とする
-  var heights = placements.map(function(p){ return p.height; }).sort(function(a,b){return a-b;});
-  var medH = heights[Math.floor(heights.length/2)] || 300;
-  var threshold = medH * 0.5;
-  var zToTier = {};
-  var tierCount = 1;
-  var prevZ = null;
-  sortedZs.forEach(function(z) {
-    if (prevZ !== null && (z - prevZ) > threshold) tierCount++;
-    zToTier[z] = tierCount;
-    prevZ = z;
-  });
-  placements.forEach(function(p) {
-    var tier = zToTier[p.z] || 1;
+  placements.forEach(function(p, i) {
+    var tier = tierArr[i] || 1;
     var tr = document.createElement('tr');
     tr.innerHTML = '<td><span class="tier-badge">' + tier + '段</span></td>' +
       '<td>' + escHtml(p.sku_id) + '</td>' +
@@ -2633,7 +2640,7 @@ function applyRealResults(data, cases) {
     tr.innerHTML = '<td>' + (i+1) + '</td>' +
       '<td>' + escHtml(p.sku_id) + '</td>' +
       '<td>' + escHtml(p.name) + '</td>' +
-      '<td>' + (zToTier[p.z] || 1) + '段</td>' +
+      '<td>' + (tierArr[i] || 1) + '段</td>' +
       '<td>X:' + p.x + 'mm / Y:' + p.y + 'mm</td>' +
       '<td>' + (p.rotation === 90 ? '90°回転' : '正置き') + '</td><td>—</td>';
     placeTbody.appendChild(tr);
