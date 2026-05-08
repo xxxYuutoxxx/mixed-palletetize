@@ -479,6 +479,55 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 #toast.warn { background: #e67e22; }
 
+/* ── CALC PROGRESS OVERLAY ── */
+#calcProgressOverlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(10,20,40,.55); z-index: 10000;
+  align-items: center; justify-content: center;
+}
+#calcProgressOverlay.active { display: flex; }
+#calcProgressPanel {
+  background: #fff; border-radius: 14px; padding: 32px 44px;
+  min-width: 340px; box-shadow: 0 10px 40px rgba(0,0,0,.35);
+  text-align: center;
+}
+#calcProgressTitle {
+  font-size: 15px; font-weight: 700; color: #1a3a5c; margin-bottom: 6px;
+}
+#calcProgressSubtitle {
+  font-size: 12px; color: #8a9ab0; margin-bottom: 20px; font-weight: 500;
+}
+.calc-progress-bar-wrap {
+  background: #e8eef5; border-radius: 99px; height: 10px;
+  overflow: hidden; margin-bottom: 14px;
+}
+#calcProgressBar {
+  height: 100%; width: 0%; border-radius: 99px;
+  background: linear-gradient(90deg, #2471a3, #3498db, #5dade2);
+  background-size: 200% 100%; animation: shimmer 1.8s linear infinite;
+  transition: width .4s ease;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+#calcProgressBar.done {
+  background: linear-gradient(90deg, #1a7a4c, #27ae60);
+  animation: none;
+}
+#calcProgressInfo {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; color: #8a9ab0; font-weight: 600;
+}
+#calcProgressInfo .pct { font-size: 14px; color: #1a3a5c; font-weight: 700; }
+
+/* ── CALC TIME BAR (results) ── */
+#calcTimeBar {
+  text-align: right; font-size: 11px; color: #8a9ab0;
+  margin: -8px 0 14px; padding-right: 2px;
+}
+#calcTimeBar strong { color: #1a3a5c; }
+
 /* ── PRINT / PDF ── */
 @media print {
   body { min-width: 0; background: #fff; font-size: 11px; }
@@ -1039,6 +1088,11 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
         </div>
       </div>
 
+      <!-- Calc time bar -->
+      <div id="calcTimeBar" style="display:none;">
+        ⏱ 計算時間: <strong id="calcTimeDisplay">—</strong>
+      </div>
+
       <!-- Ideal vs Actual comparison -->
       <div class="ideal-compare-card">
         <div class="ideal-compare-title">📊 理想解との差分分析</div>
@@ -1302,6 +1356,21 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
 
 <div id="toast"></div>
 
+<!-- ── CALC PROGRESS OVERLAY ── -->
+<div id="calcProgressOverlay">
+  <div id="calcProgressPanel">
+    <div id="calcProgressTitle">計算中...</div>
+    <div id="calcProgressSubtitle">積付アルゴリズムを実行しています</div>
+    <div class="calc-progress-bar-wrap">
+      <div id="calcProgressBar"></div>
+    </div>
+    <div id="calcProgressInfo">
+      <span id="calcElapsedTime">0.0 秒</span>
+      <span class="pct" id="calcProgressPct">0%</span>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════════
      JAVASCRIPT
 ═══════════════════════════════════════ -->
@@ -1546,6 +1615,76 @@ function showToast(msg, type) {
   toastTimer = setTimeout(function() { t.className = ''; }, 3000);
 }
 
+/* ── CALC PROGRESS ── */
+var _cpTimerID = null;
+var _cpCrawlID = null;
+var _cpStart   = 0;
+
+function showCalcProgress() {
+  _cpStart = Date.now();
+  var bar   = document.getElementById('calcProgressBar');
+  var pct   = document.getElementById('calcProgressPct');
+  var title = document.getElementById('calcProgressTitle');
+  var sub   = document.getElementById('calcProgressSubtitle');
+  bar.classList.remove('done');
+  bar.style.transition = 'none';
+  bar.style.width = '0%';
+  pct.textContent   = '0%';
+  title.textContent = '計算中...';
+  sub.textContent   = '積付アルゴリズムを実行しています';
+  document.getElementById('calcElapsedTime').textContent = '0.0 秒';
+  document.getElementById('calcProgressOverlay').classList.add('active');
+
+  // elapsed ticker
+  _cpTimerID = setInterval(function() {
+    var s = ((Date.now() - _cpStart) / 1000).toFixed(1);
+    document.getElementById('calcElapsedTime').textContent = s + ' 秒';
+  }, 100);
+
+  // phase 1: 0→80% in 1.5s
+  setTimeout(function() {
+    bar.style.transition = 'width 1.5s ease-out';
+    bar.style.width = '80%';
+    pct.textContent = '80%';
+  }, 50);
+
+  // phase 2: 80→92% slowly (8s)
+  setTimeout(function() {
+    bar.style.transition = 'width 8s linear';
+    bar.style.width = '92%';
+    _cpCrawlID = setInterval(function() {
+      var cur = parseFloat(bar.style.width) || 0;
+      if (cur < 92) pct.textContent = Math.round(cur) + '%';
+    }, 400);
+  }, 1600);
+}
+
+function hideCalcProgress(success, elapsedSec) {
+  clearInterval(_cpTimerID);
+  clearInterval(_cpCrawlID);
+  var bar   = document.getElementById('calcProgressBar');
+  var pct   = document.getElementById('calcProgressPct');
+  var title = document.getElementById('calcProgressTitle');
+  var sub   = document.getElementById('calcProgressSubtitle');
+  var elapsed = elapsedSec != null ? elapsedSec : ((Date.now() - _cpStart) / 1000).toFixed(2);
+
+  if (success) {
+    bar.classList.add('done');
+    bar.style.transition = 'width 0.25s ease-in';
+    bar.style.width = '100%';
+    pct.textContent   = '100%';
+    title.textContent = '完了！';
+    sub.textContent   = '計算時間: ' + elapsed + ' 秒';
+    document.getElementById('calcElapsedTime').textContent = elapsed + ' 秒';
+    setTimeout(function() {
+      document.getElementById('calcProgressOverlay').classList.remove('active');
+    }, 700);
+  } else {
+    document.getElementById('calcProgressOverlay').classList.remove('active');
+  }
+  return elapsed;
+}
+
 /* ── COUNT ── */
 function updateCount() {
   document.getElementById('caseCount').textContent = rows.length;
@@ -1754,7 +1893,7 @@ function runCalc() {
     fifo_lookahead: supplyMode === 'fifo' ? (parseInt((document.getElementById('fifoLookaheadDepth') || {value:'0'}).value) || 0) : 0
   };
 
-  showToast('計算中...');
+  showCalcProgress();
   fetch('/api/pack', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1765,10 +1904,14 @@ function runCalc() {
     return r.json();
   })
   .then(function(data) {
-    applyRealResults(data, cases);
-    switchTab(3);
+    var elapsed = hideCalcProgress(true);
+    setTimeout(function() {
+      applyRealResults(data, cases, elapsed);
+      switchTab(3);
+    }, 750);
   })
   .catch(function(e) {
+    hideCalcProgress(false);
     showToast('計算エラー: ' + e.message, 'warn');
   });
 }
@@ -2498,9 +2641,18 @@ function computeDummyResults(cases) {
 
 /* ── APPLY REAL RESULTS (APIレスポンスをUIに反映) ── */
 var lastResult = null;
-function applyRealResults(data, cases) {
+function applyRealResults(data, cases, elapsed) {
   lastResult = data;
   var sm = data.summary;
+
+  /* ── 計算時間バー ── */
+  var ctBar = document.getElementById('calcTimeBar');
+  if (elapsed != null) {
+    document.getElementById('calcTimeDisplay').textContent = elapsed + ' 秒';
+    ctBar.style.display = '';
+  } else {
+    ctBar.style.display = 'none';
+  }
   var placements = data.placements || [];
   var unplaced   = data.unplaced   || [];
   var PL = getPalletL(), PW = getPalletW();
