@@ -103,7 +103,9 @@
       "PowerShell(Get-Process *)",
       "PowerShell(Start-Sleep -Seconds 3; Invoke-WebRequest -Uri \"http://127.0.0.1:8000\" -UseBasicParsing -TimeoutSec 5 | Select-Object -ExpandProperty StatusCode)",
       "PowerShell(Invoke-WebRequest -Uri \"http://127.0.0.1:8000\" -UseBasicParsing -TimeoutSec 5 | Select-Object -ExpandProperty StatusCode)",
-      "PowerShell(netstat *)"
+      "PowerShell(netstat *)",
+      "PowerShell(Stop-Process *)",
+      "WebFetch(domain:mixed-palletetize.onrender.com)"
     ],
     "defaultMode": "acceptEdits"
   }

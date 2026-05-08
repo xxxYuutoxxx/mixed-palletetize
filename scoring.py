@@ -271,9 +271,9 @@ def score_lateral_contact(
     隣接する配置済みケースまたはパレット壁に接している面の割合。
     搬送中の棒積み荷崩れ防止を目的とする。
       1.0: 全4面が接触（または壁）
-      0.75: 3面接触
-      0.5: 2面接触
-      0.25: 1面接触
+      0.9: 3面接触
+      0.7: 2面接触（1面との差を大きくし2面を強く誘導）
+      0.2: 1面接触
       0.0: 全く接触なし
     """
     contact_count = 0
@@ -316,7 +316,9 @@ def score_lateral_contact(
                 y_max_touched = True
 
     contact_count = sum([x_min_touched, x_max_touched, y_min_touched, y_max_touched])
-    return contact_count / 4.0
+    # 非線形スコア: 2面以上で大きく加点し、2面接触を強く誘導する
+    scores = [0.0, 0.2, 0.7, 0.9, 1.0]
+    return scores[contact_count]
 
 
 def compute_score(

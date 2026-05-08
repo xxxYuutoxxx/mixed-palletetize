@@ -55,6 +55,22 @@ def generate_candidates(
         add(p.x2, p.y, p.z2, "top")
         add(p.x, p.y2, p.z2, "top")
 
+    # 2面接触を増やすためのクロス座標候補
+    # 異なるケースのX境界×Y境界の交点を追加することで、
+    # 個別ケースのコーナーからは生まれない2面接触位置を候補に含める
+    if placements:
+        x_bounds = sorted(set([0] + [p.x2 for p in placements]))
+        y_bounds = sorted(set([0] + [p.y2 for p in placements]))
+        z_levels = sorted(set([0] + [p.z for p in placements]))
+        # 候補数が多くなりすぎないよう各軸20点までに制限
+        x_bounds = x_bounds[:20]
+        y_bounds = y_bounds[:20]
+        z_levels = z_levels[:10]
+        for z in z_levels:
+            for x in x_bounds:
+                for y in y_bounds:
+                    add(x, y, z, "cross")
+
     # パレット範囲をはみ出す候補を除去（配置時に詳細チェックするが事前フィルタ）
     max_x = pallet.length * (1 + overhang_limit)
     max_y = pallet.width * (1 + overhang_limit)
