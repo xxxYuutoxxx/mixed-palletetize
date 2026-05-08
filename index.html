@@ -589,8 +589,8 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
       </div>
       <div class="bottom-bar">
         <button class="btn btn-secondary" id="addRowBtn" onclick="addRow()">＋ ケース追加</button>
-        <span class="count-badge">登録数: <span id="caseCount">0</span> / 30</span>
-        <span class="hint-inline">最大30品種まで登録できます</span>
+        <span class="count-badge">登録数: <span id="caseCount">0</span> / 100</span>
+        <span class="hint-inline">最大100品種まで登録できます</span>
         <div style="flex:1"></div>
         <button class="btn btn-secondary" onclick="clearAll()">全クリア</button>
         <button class="btn btn-primary" onclick="runCalc()">▶ 計算実行</button>
@@ -1000,6 +1000,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
           <div class="kpi-label">積付効率 (%)</div>
           <div class="kpi-value" id="kpiEff">—</div>
           <div class="kpi-unit">体積効率</div>
+          <div class="kpi-unit" id="kpiEffPerPallet" style="display:none;font-size:10px;margin-top:2px;line-height:1.6;"></div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">パレット使用枚数</div>
@@ -1188,21 +1189,6 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
 
       <!-- ── Full-width lower sections ── -->
 
-      <!-- Placement table -->
-      <div class="result-section">
-        <div class="result-section-title">ケース配置一覧</div>
-        <div class="card" style="padding:14px 18px;">
-          <table class="placement-table">
-            <thead>
-              <tr>
-                <th>No.</th><th>品番</th><th>品名</th><th>段</th><th>位置 (X / Y)</th><th>向き</th><th>備考</th>
-              </tr>
-            </thead>
-            <tbody id="placementBody"></tbody>
-          </table>
-        </div>
-      </div>
-
       <!-- Unplaced -->
       <div class="result-section">
         <div class="result-section-title">未配置ケース一覧</div>
@@ -1224,7 +1210,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
 
       <!-- Score breakdown -->
       <div class="result-section" id="scoreBreakdownSection" style="display:none;">
-        <div class="result-section-title">スコア内訳 — 採用配置のスコア詳細（先頭20件）</div>
+        <div class="result-section-title">スコア内訳 — 採用配置のスコア詳細</div>
         <div class="card" style="padding:14px 18px;">
           <table class="score-bd-table">
             <thead>
@@ -1580,7 +1566,7 @@ function validateInput(inp) {
 
 /* ── ADD ROW ── */
 function addRow(data) {
-  if (rows.length >= 30) { showToast('最大30品種まで登録できます', 'warn'); return; }
+  if (rows.length >= 100) { showToast('最大100品種まで登録できます', 'warn'); return; }
   var rid = ++rowId;
   rows.push(rid);
   updateCount();
@@ -1859,7 +1845,7 @@ function parseImportData(text, fmt) {
 
   if (rows.length === 0) { showToast('有効なデータ行がありません', 'warn'); return; }
 
-  var maxRows = 30;
+  var maxRows = 100;
   if (rows.length > maxRows) {
     rows = rows.slice(0, maxRows);
     showToast(maxRows + '品種を超えるため先頭' + maxRows + '件のみ読込みました', 'warn');
@@ -2458,22 +2444,6 @@ function computeDummyResults(cases) {
   });
 
   /* placement table */
-  var placeTbody = document.getElementById('placementBody');
-  placeTbody.innerHTML = '';
-  var placeNum = 1;
-  sorted.slice(0,4).forEach(function(c, i) {
-    for (var j = 0; j < Math.min(2, c.qty); j++) {
-      var tr = document.createElement('tr');
-      tr.innerHTML = '<td>' + placeNum++ + '</td>' +
-        '<td>' + escHtml(c.id) + '</td>' +
-        '<td>' + escHtml(c.name) + '</td>' +
-        '<td>' + (i+1) + '段</td>' +
-        '<td>X:' + (j*c.l) + 'mm / Y:0mm</td>' +
-        '<td>正置き</td><td>—</td>';
-      placeTbody.appendChild(tr);
-    }
-  });
-
   /* applied conditions */
   document.getElementById('appliedSupply').textContent = modeLabels[supplyMode];
   document.getElementById('appliedAlgo').textContent   = (document.getElementById('algoSelect') || {value:'層別積み'}).value;
@@ -2547,6 +2517,25 @@ function applyRealResults(data, cases) {
   document.getElementById('kpiStability').style.color = stab >= 80 ? '#27ae60' : stab >= 60 ? '#e67e22' : '#e74c3c';
   document.getElementById('kpiUnplaced').textContent  = unplaced.length;
   document.getElementById('warnEff').textContent      = sm.efficiency_pct;
+
+  /* ── パレット別体積効率 ── */
+  var effPerPalletEl = document.getElementById('kpiEffPerPallet');
+  if (sm.pallet_count > 1 && data.pallet && placements.length > 0) {
+    var palVol = data.pallet.length * data.pallet.width * data.pallet.effective_height;
+    var palVolMap = {};
+    placements.forEach(function(p) {
+      var pid = p.pallet_id || 1;
+      palVolMap[pid] = (palVolMap[pid] || 0) + p.length * p.width * p.height;
+    });
+    var lines = Object.keys(palVolMap).sort(function(a,b){ return a-b; }).map(function(pid) {
+      var eff = palVol > 0 ? (palVolMap[pid] / palVol * 100).toFixed(1) : '—';
+      return 'P' + pid + ': ' + eff + '%';
+    });
+    effPerPalletEl.innerHTML = lines.join('<br>');
+    effPerPalletEl.style.display = '';
+  } else {
+    effPerPalletEl.style.display = 'none';
+  }
 
   /* ── Ideal vs Actual (JS簡易計算) ── */
   var idealEff   = parseFloat(computeIdealEff(cases));
@@ -2630,20 +2619,6 @@ function applyRealResults(data, cases) {
       '<td>' + (p.rotation === 90 ? '90°' : '正置') + '</td>' +
       '<td>' + p.height + '</td>';
     tbody.appendChild(tr);
-  });
-
-  /* ── Placement table ── */
-  var placeTbody = document.getElementById('placementBody');
-  placeTbody.innerHTML = '';
-  placements.slice(0, 20).forEach(function(p, i) {
-    var tr = document.createElement('tr');
-    tr.innerHTML = '<td>' + (i+1) + '</td>' +
-      '<td>' + escHtml(p.sku_id) + '</td>' +
-      '<td>' + escHtml(p.name) + '</td>' +
-      '<td>' + (tierArr[i] || 1) + '段</td>' +
-      '<td>X:' + p.x + 'mm / Y:' + p.y + 'mm</td>' +
-      '<td>' + (p.rotation === 90 ? '90°回転' : '正置き') + '</td><td>—</td>';
-    placeTbody.appendChild(tr);
   });
 
   /* ── CG (重心: 配置済みケースの重量重心) ── */
@@ -2768,7 +2743,7 @@ function renderScoreBreakdowns(placements) {
   if (withBreakdown.length === 0) { section.style.display = 'none'; return; }
 
   tbody.innerHTML = '';
-  withBreakdown.slice(0, 20).forEach(function(p, i) {
+  withBreakdown.forEach(function(p, i) {
     var bd = p.score_breakdown;
     var tr = document.createElement('tr');
     tr.innerHTML =
