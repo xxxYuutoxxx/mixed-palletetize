@@ -113,7 +113,9 @@
       "PowerShell(git pull *)",
       "PowerShell(python test_algorithm.py)",
       "PowerShell(python benchmark.py)",
-      "PowerShell(git add *)"
+      "PowerShell(git add *)",
+      "PowerShell(git push *)",
+      "PowerShell(try { $c = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction Stop | Select-Object -First 1; $p = Get-Process -Id $c.OwningProcess; \"LISTEN: PID=$\\($c.OwningProcess\\) name=$\\($p.ProcessName\\) path=$\\($p.Path\\) start=$\\($p.StartTime\\)\" } catch { \"port 8000: not listening\" })"
     ],
     "defaultMode": "acceptEdits"
   }

@@ -910,8 +910,8 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
                 同一平面とみなす高さ差許容値: <input type="number" id="heightTolerance" min="0" max="100" step="1" value="5" style="width:65px;"> mm
               </label>
               <label class="constraint-item"><input type="checkbox" id="cbTempSeparate" class="constraint-chk"        onchange="checkConflicts()"> 温度帯混載禁止</label>
-              <label class="constraint-item"><input type="checkbox" id="cbBlockStacking" class="constraint-chk"       onchange="checkConflicts()"> 同一品種ブロック積み優先（面積み）</label>
-              <label class="constraint-item"><input type="checkbox" id="cbLayerFirst"    class="constraint-chk"       onchange="checkConflicts()"> 面積み優先（層を埋めてから上段へ）</label>
+              <label class="constraint-item"><input type="checkbox" id="cbBlockStacking" class="constraint-chk" checked onchange="checkConflicts()"> 同一品種ブロック積み優先（面積み）</label>
+              <label class="constraint-item"><input type="checkbox" id="cbLayerFirst"    class="constraint-chk" checked onchange="checkConflicts()"> 面積み優先（層を埋めてから上段へ）</label>
             </div>
           </div>
         </div>
@@ -946,7 +946,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
         <button class="preset-btn" data-preset="standard"  onclick="applyPreset('standard')">⚖ 標準</button>
         <button class="preset-btn" data-preset="stability" onclick="applyPreset('stability')">🛡 安定性優先</button>
         <button class="preset-btn" data-preset="loadRate"  onclick="applyPreset('loadRate')">📊 積載率優先</button>
-        <button class="preset-btn active" data-preset="field"     onclick="applyPreset('field')">🏭 現場再現優先</button>
+        <button class="preset-btn" data-preset="field"     onclick="applyPreset('field')">🏭 現場再現優先</button>
       </div>
     </div>
 
@@ -954,28 +954,28 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
       <div class="card-title">評価重み設定</div>
       <div class="slider-row">
         <div class="slider-label">積載率重視</div>
-        <input type="range" id="weight_loadRate" min="0" max="100" value="50">
-        <div class="slider-val" id="wlabel_loadRate">50%</div>
+        <input type="range" id="weight_loadRate" min="0" max="100" value="90">
+        <div class="slider-val" id="wlabel_loadRate">90%</div>
       </div>
       <div class="slider-row">
         <div class="slider-label">安定性重視</div>
-        <input type="range" id="weight_stability" min="0" max="100" value="50">
-        <div class="slider-val" id="wlabel_stability">50%</div>
+        <input type="range" id="weight_stability" min="0" max="100" value="60">
+        <div class="slider-val" id="wlabel_stability">60%</div>
       </div>
       <div class="slider-row">
         <div class="slider-label">高さ抑制重視</div>
-        <input type="range" id="weight_height" min="0" max="100" value="30">
-        <div class="slider-val" id="wlabel_height">30%</div>
+        <input type="range" id="weight_height" min="0" max="100" value="40">
+        <div class="slider-val" id="wlabel_height">40%</div>
       </div>
       <div class="slider-row">
         <div class="slider-label">同品種集約重視</div>
-        <input type="range" id="weight_grouping" min="0" max="100" value="30">
-        <div class="slider-val" id="wlabel_grouping">30%</div>
+        <input type="range" id="weight_grouping" min="0" max="100" value="70">
+        <div class="slider-val" id="wlabel_grouping">70%</div>
       </div>
       <div class="slider-row">
         <div class="slider-label">側面接触重視</div>
-        <input type="range" id="weight_lateral" min="0" max="100" value="0">
-        <div class="slider-val" id="wlabel_lateral">0%</div>
+        <input type="range" id="weight_lateral" min="0" max="100" value="85">
+        <div class="slider-val" id="wlabel_lateral">85%</div>
       </div>
       <div style="margin-top:14px;">
         <div style="font-size:11px;color:#8a9ab0;margin-bottom:5px;">各重みの比率（合計比）</div>
@@ -1389,7 +1389,8 @@ const PRESETS = {
 };
 
 const PRESET_LABELS = {
-  standard:'標準', stability:'安定性優先', loadRate:'積載率優先', field:'現場再現優先'
+  standard:'標準', stability:'安定性優先', loadRate:'積載率優先', field:'現場再現優先',
+  custom:'カスタム（デフォルト）'
 };
 
 const initialData = [
@@ -1401,7 +1402,7 @@ const initialData = [
 /* ── STATE ── */
 let rows = [], rowId = 0;
 let supplyMode = 'fifo';
-let currentPreset = 'field';
+let currentPreset = 'custom';  // 初期値はプリセット外のカスタムデフォルト設定
 let execMode = 'real';
 
 /* ── PALLET GETTERS ── */
