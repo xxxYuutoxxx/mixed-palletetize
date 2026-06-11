@@ -905,6 +905,7 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
               <label class="constraint-item"><input type="checkbox" id="cbOuterPrio"    class="constraint-chk"        onchange="checkConflicts()"> 外周優先配置</label>
               <label class="constraint-item"><input type="checkbox" id="cbStackPriority" class="constraint-chk"       onchange="checkConflicts()"> 段積み優先（隙間充填より段を優先）</label>
               <label class="constraint-item"><input type="checkbox" id="cbNoOverhang"   class="constraint-chk"  onchange="checkConflicts()"> オーバーハング禁止</label>
+              <label class="constraint-item"><input type="checkbox" id="cbFullSupport"  class="constraint-chk" checked onchange="checkConflicts()"> ケース間オーバーハング禁止（完全支持）</label>
               <label class="constraint-item">
                 同一平面とみなす高さ差許容値: <input type="number" id="heightTolerance" min="0" max="100" step="1" value="5" style="width:65px;"> mm
               </label>
@@ -1873,6 +1874,7 @@ function runCalc() {
       outer_priority: !!(document.getElementById('cbOuterPrio')     || {}).checked,
       stack_priority: !!(document.getElementById('cbStackPriority') || {}).checked,
       no_overhang:    !!(document.getElementById('cbNoOverhang') || {}).checked || parseFloat((document.getElementById('overhangLimit') || {value:'25'}).value) === 0,
+      full_support:   !!(document.getElementById('cbFullSupport') || {checked:true}).checked,
       overhang_limit: (!!(document.getElementById('cbNoOverhang') || {}).checked || parseFloat((document.getElementById('overhangLimit') || {value:'25'}).value) === 0) ? 0.0 : (parseFloat((document.getElementById('overhangLimit') || {value:'25'}).value) || 25) / (parseInt((document.getElementById('palletL') || {value:'1100'}).value) || 1100),
       temp_separate:   !!(document.getElementById('cbTempSeparate')   || {}).checked,
       height_tolerance: parseInt((document.getElementById('heightTolerance') || {value:'0'}).value) || 0,
@@ -2562,6 +2564,7 @@ function computeDummyResults(cases) {
     cbFragileTop:'Fragile品上載禁止', cbHeavyBottom:'重量物下段優先',
     cbSameGroup:'同品種同一段優先', cbCenterPrio:'中心寄せ優先',
     cbStackPriority:'段積み優先', cbNoOverhang:'オーバーハング禁止',
+    cbFullSupport:'ケース間オーバーハング禁止(完全支持)',
     cbTempSeparate:'温度帯混載禁止', cbBlockStacking:'ブロック積み優先',
     cbLayerFirst:'面積み優先'
   };

@@ -87,8 +87,9 @@ def score_void_suppression(
 ) -> float:
     """
     空隙抑制スコア: 底面支持率 + 既存ボックスとの面接触を評価。
-    面接触がある位置（X/Y/Z方向に隣接）を優遇し、
-    既存ボックスの対角コーナーに配置される孤立した配置を抑制する。
+    面接触がある位置（X/Y/Z方向に隣接）を優遇し、孤立配置を抑制する。
+    note: score_lateral_contact は w_lateral=0 がデフォルトのため、
+          ここで接触ボーナスを担保することで有効な密着配置を誘導する。
     """
     s_bottom = score_support_ratio(x, y, z, case_l, case_w, placements)
 
@@ -97,17 +98,14 @@ def score_void_suppression(
 
     has_contact = False
     for p in placements:
-        # X方向面接触（左右）
         if x == p.x2 or x + case_l == p.x:
             if y < p.y2 and y + case_w > p.y and z < p.z2 and z + case_h > p.z:
                 has_contact = True
                 break
-        # Y方向面接触（前後）
         if y == p.y2 or y + case_w == p.y:
             if x < p.x2 and x + case_l > p.x and z < p.z2 and z + case_h > p.z:
                 has_contact = True
                 break
-        # Z方向面接触（底面が既存ボックスの上面に接する）
         if z == p.z2:
             if x < p.x2 and x + case_l > p.x and y < p.y2 and y + case_w > p.y:
                 has_contact = True
@@ -392,13 +390,15 @@ def compute_score(
 
     total = min(1.0, max(0.0, score))
     breakdown = ScoreBreakdown(
-        support_score =round(s_support,  4),
-        center_score  =round(s_position, 4),
-        height_score  =round(s_height,   4),
-        void_score    =round(s_void,     4),
-        group_score   =round(s_group,    4),
-        block_score   =round(s_block,    4),
-        lateral_score =round(s_lateral,  4),
-        total_score   =round(total,      4),
+        support_score  = round(s_support,  4),
+        center_score   = round(s_position, 4),
+        height_score   = round(s_height,   4),
+        void_score     = round(s_void,     4),
+        group_score    = round(s_group,    4),
+        block_score    = round(s_block,    4),
+        lateral_score  = round(s_lateral,  4),
+        layer_score    = round(s_layer,    4),
+        overhang_score = round(s_overhang, 4),
+        total_score    = round(total,      4),
     )
     return total, breakdown

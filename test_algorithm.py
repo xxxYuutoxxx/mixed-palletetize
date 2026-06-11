@@ -97,10 +97,12 @@ def test_candidates_one_placed():
     from models import Placement
     p = Placement("A", "A", 0, 0, 0, 400, 300, 200, 10.0, 0)
     cands = generate_candidates([p], PALLET)
-    xs = [(c.x, c.y, c.z) for c in cands]
-    assert (400, 0, 0) in xs  # 右隣
-    assert (0, 300, 0) in xs  # 奥隣
-    assert (0, 0, 200) in xs  # 天面
+    xys = [(c.x, c.y) for c in cands]
+    assert (400, 0) in xys  # 右隣
+    assert (0, 300) in xys  # 奥隣
+    assert (0, 0) in xys    # 天面 (実Zは packer 側で get_support_z により再計算)
+    # (x,y) の重複候補は同一配置に収束するため除去されている
+    assert len(xys) == len(set(xys))
 
 def test_get_support_z():
     from models import Placement
@@ -190,6 +192,95 @@ def test_pack_ideal_mode():
 
 
 # ---------------------------------------------------------------------------
+# バグ修正回帰テスト (2026-06)
+# ---------------------------------------------------------------------------
+
+def test_temp_lateral_adjacency():
+    """温度帯分離: 横の面接触も違反として検出される"""
+    from models import Placement
+    from constraints import check_temperature_separation
+    rules = RuleConfig(temp_separate=True)
+    frozen = CaseItem("FZ", "FZ", 400, 300, 200, 5.0, 1, temperature="frozen")
+    placed = [Placement("NM", "NM", 0, 0, 0, 400, 300, 200, 5.0, 0,
+                        temperature="normal")]
+    ok, _ = check_temperature_separation(frozen, placed, 400, 0, 0, 400, 300, 200, rules)
+    assert not ok, "横隣接の温度帯違反が検出されない"
+    # 離れていればOK
+    ok, _ = check_temperature_separation(frozen, placed, 500, 0, 0, 400, 300, 200, rules)
+    assert ok
+    # コーナー接触のみ（面接触なし）はOK
+    ok, _ = check_temperature_separation(frozen, placed, 400, 300, 0, 400, 300, 200, rules)
+    assert ok
+
+def test_max_top_load_multi_tier():
+    """上面許容荷重: 2段以上下のケースの許容荷重超過も検出される"""
+    from models import Placement
+    from constraints import check_max_top_load
+    a = Placement("A", "A", 0, 0, 0, 400, 300, 200, 10.0, 0, max_top_load=10.0)
+    b = Placement("B", "B", 0, 0, 200, 400, 300, 200, 8.0, 0, max_top_load=100.0)
+    # Bの上に8kg → Aには 8+8=16kg > 10kg
+    c = CaseItem("C", "C", 400, 300, 200, 8.0, 1)
+    ok, _ = check_max_top_load(0, 0, 400, 400, 300, c, [a, b])
+    assert not ok, "多段積みの許容荷重超過が検出されない"
+    # 合計が許容内ならOK (8+1.5=9.5 <= 10)
+    c2 = CaseItem("C2", "C2", 400, 300, 200, 1.5, 1)
+    ok, _ = check_max_top_load(0, 0, 400, 400, 300, c2, [a, b])
+    assert ok
+
+def test_free_mode_no_early_pallet_close():
+    """freeモード: 配置不能アイテムがあっても他のアイテムは同一パレットに配置される"""
+    cases = [
+        CaseItem("BIG", "BIG", 900, 900, 400, 50.0, 2, stackable=False),
+        CaseItem("SML", "SML", 200, 200, 200, 1.0, 20),
+    ]
+    result = pack(cases, PALLET, SupplyConfig(mode="free"), RULES, SCORE)
+    pallet1_smalls = sum(
+        1 for p in result.placements if p.pallet_id == 1 and p.sku_id == "SML")
+    assert pallet1_smalls > 0, "大箱の失敗でパレットが早期に閉じ、小箱が入らなかった"
+
+def test_fifo_strict_order():
+    """厳密FIFO: 途中のケースが置けない場合も配置順序が入力順を維持する"""
+    cases = [
+        CaseItem("A", "A", 400, 400, 300, 10.0, 1),
+        CaseItem("B", "B", 1050, 1050, 400, 30.0, 1, stackable=False),
+        CaseItem("C", "C", 400, 400, 300, 10.0, 1),
+    ]
+    supply = SupplyConfig(mode="fifo", fifo_strict=True)
+    result = pack(cases, PALLET, supply, RULES, SCORE)
+    order = [p.sku_id for p in sorted(result.placements, key=lambda p: p.sequence)]
+    assert order == ["A", "B", "C"], f"FIFO順序違反: {order}"
+
+def test_full_support_flag():
+    """full_support=False で部分支持（レンガ積み）が許可される"""
+    from models import Placement
+    from constraints import run_all_checks
+    base = Placement("B", "B", 0, 0, 0, 400, 300, 200, 10.0, 0)
+    item = CaseItem("T", "T", 400, 300, 200, 5.0, 1)
+    # x=120 に置くと支持率 280/400 = 70%
+    rules_strict = RuleConfig()  # full_support=True (デフォルト)
+    ok, _ = run_all_checks(120, 0, 200, 400, 300, 200, item, [base], PALLET, rules_strict)
+    assert not ok, "完全支持要求なのに部分支持が許可された"
+    rules_brick = RuleConfig(full_support=False, support_ratio_min=0.7)
+    ok, reasons = run_all_checks(120, 0, 200, 400, 300, 200, item, [base], PALLET, rules_brick)
+    assert ok, f"支持率70%が棄却された: {reasons}"
+    # 下限未満 (支持率 50%) は引き続き棄却
+    ok, _ = run_all_checks(200, 0, 200, 400, 300, 200, item, [base], PALLET, rules_brick)
+    assert not ok
+
+
+def test_empty_pallet_not_counted():
+    """1個も置けなかったパレットは pallet_count に数えない"""
+    cases = [
+        CaseItem("OK", "OK", 400, 300, 200, 5.0, 2),
+        CaseItem("NG", "NG", 1200, 1200, 400, 30.0, 1),  # どのパレットにも不可
+    ]
+    result = pack(cases, PALLET, SUPPLY, RULES, SCORE)
+    used = set(p.pallet_id for p in result.placements)
+    assert result.pallet_count == len(used), (
+        f"空パレットがカウントされている: count={result.pallet_count}, 実使用={used}")
+
+
+# ---------------------------------------------------------------------------
 # メイン
 # ---------------------------------------------------------------------------
 
@@ -215,6 +306,12 @@ if __name__ == "__main__":
         ("pack_fifo_order", test_pack_fifo_order),
         ("pack_efficiency_not_zero", test_pack_efficiency_not_zero),
         ("pack_ideal_mode", test_pack_ideal_mode),
+        ("temp_lateral_adjacency", test_temp_lateral_adjacency),
+        ("max_top_load_multi_tier", test_max_top_load_multi_tier),
+        ("free_mode_no_early_pallet_close", test_free_mode_no_early_pallet_close),
+        ("fifo_strict_order", test_fifo_strict_order),
+        ("full_support_flag", test_full_support_flag),
+        ("empty_pallet_not_counted", test_empty_pallet_not_counted),
     ]
 
     print(f"\n{'='*50}")

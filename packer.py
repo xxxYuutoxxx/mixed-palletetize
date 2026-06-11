@@ -46,19 +46,38 @@ def select_next_case(
     supply: SupplyConfig,
     rules: RuleConfig,
     skip_counts: Optional[Dict[int, int]] = None,
+    failed: Optional[set] = None,
 ) -> Optional[Tuple[int, CaseItem]]:
     """
     供給キューから次に配置すべきケースのインデックスと CaseItem を選ぶ。
     skip_counts: id(CaseItem) → スキップ回数。バッファモード時のスタベーション防止に使用。
+    failed: 現在のパレット状態で配置失敗した id(CaseItem) の集合。
+            同一SKUの全数量は同一オブジェクトを共有するため SKU 単位で除外される。
+            選択可能なアイテムが残っていない場合は None（= パレットを閉じる）。
     """
     if not queue:
         return None
+    if failed is None:
+        failed = set()
 
     if supply.mode == "fifo":
+        if id(queue[0]) in failed:
+            if supply.fifo_strict:
+                # 厳密FIFO: 先頭が置けない以上、後続を先に置くことはできない
+                return None
+            for i, c in enumerate(queue):
+                if id(c) not in failed:
+                    return i, c
+            return None
         return 0, queue[0]
 
     if supply.mode == "buffer":
-        candidates = list(enumerate(queue[:supply.buffer_size]))
+        candidates = [
+            (i, c) for i, c in enumerate(queue[:supply.buffer_size])
+            if id(c) not in failed
+        ]
+        if not candidates:
+            return None
         # スタベーション防止: buffer_size 回以上スキップされたアイテムを強制選択
         if skip_counts:
             threshold = supply.buffer_size
@@ -71,7 +90,9 @@ def select_next_case(
                 starved.sort(key=lambda ic: skip_counts.get(id(ic[1]), 0), reverse=True)
                 return starved[0]
     else:
-        candidates = list(enumerate(queue))
+        candidates = [(i, c) for i, c in enumerate(queue) if id(c) not in failed]
+        if not candidates:
+            return None
 
     if rules.fragile_top:
         non_fragile = [(i, c) for i, c in candidates if not c.fragile]
@@ -135,12 +156,13 @@ def pack_single_pallet(
     queue = list(cases_queue)
     truly_unplaceable: List[CaseItem] = []
     sequence = 0
-    consecutive_failures = 0
     skip_counts: Dict[int, int] = {}  # id(CaseItem) → スキップ回数
+    failed: set = set()  # 現パレット状態で配置失敗した id(CaseItem)
 
     while queue:
-        result = select_next_case(queue, placements, supply, rules, skip_counts)
+        result = select_next_case(queue, placements, supply, rules, skip_counts, failed)
         if result is None:
+            # 選択可能なアイテムが全て失敗済み → このパレットを閉じる
             break
 
         queue_idx, case_item = result
@@ -228,18 +250,16 @@ def pack_single_pallet(
             placements.append(best_placement)
             queue.pop(queue_idx)
             sequence += 1
-            consecutive_failures = 0
+            # 新しい天面・隣接面ができたため、失敗済みアイテムも再試行可能にする
+            failed.clear()
         else:
-            queue.pop(queue_idx)
-
             if not placements:
+                # 空パレットでも置けない → どのパレットでも配置不可能
+                queue.pop(queue_idx)
                 truly_unplaceable.append(case_item)
             else:
-                queue.append(case_item)
-                consecutive_failures += 1
-
-            if consecutive_failures >= len(queue) + 1:
-                break
+                # キュー順は維持したまま、現パレットでの選択対象から除外する
+                failed.add(id(case_item))
 
     return placements, queue, truly_unplaceable
 
@@ -362,13 +382,18 @@ def pack_single_pallet_beam(
     # FIFOモード先読みの重み: 次ステップのスコアをこの割合で加算する
     _LOOKAHEAD_WEIGHT = 0.3
 
-    # ビームの各状態: (placements, placed_indices_frozenset, cumulative_score)
-    beam: List[Tuple[List[Placement], frozenset, float]] = [([], frozenset(), 0.0)]
+    # ビームの各状態: (placements, placed_indices_frozenset, cumulative_score, closed)
+    # closed=True は厳密FIFOで配置不能アイテムに当たった状態（以降の配置は行わない）
+    beam: List[Tuple[List[Placement], frozenset, float, bool]] = [([], frozenset(), 0.0, False)]
 
     for i, item in enumerate(items):
-        next_candidates: List[Tuple[List[Placement], frozenset, float]] = []
+        next_candidates: List[Tuple[List[Placement], frozenset, float, bool]] = []
 
-        for placements, placed, cum_score in beam:
+        for placements, placed, cum_score, closed in beam:
+            if closed:
+                next_candidates.append((placements, placed, cum_score, True))
+                continue
+
             valid = _get_valid_placements_for_item(
                 item, placements, pallet, rules, score_cfg, exec_mode
             )
@@ -395,15 +420,18 @@ def pack_single_pallet_beam(
                     scored.sort(key=lambda t: t[0], reverse=True)
                     for _, score, new_p in scored[:beam_width]:
                         next_candidates.append(
-                            (placements + [new_p], placed | frozenset([i]), cum_score + score)
+                            (placements + [new_p], placed | frozenset([i]), cum_score + score, False)
                         )
                 else:
                     for score, new_p in valid[:beam_width]:
                         next_candidates.append(
-                            (placements + [new_p], placed | frozenset([i]), cum_score + score)
+                            (placements + [new_p], placed | frozenset([i]), cum_score + score, False)
                         )
             else:
-                next_candidates.append((placements, placed, cum_score))
+                # 厳密FIFO: 先頭が置けない時点でこの状態のパレットを閉じる
+                # （後続アイテムの先行配置 = 順序違反を防ぐ）
+                is_closed = supply.mode == "fifo" and supply.fifo_strict
+                next_candidates.append((placements, placed, cum_score, is_closed))
 
         next_candidates.sort(key=lambda s: (len(s[1]), s[2]), reverse=True)
         beam = next_candidates[:beam_width]
@@ -411,7 +439,7 @@ def pack_single_pallet_beam(
     if not beam:
         return [], list(cases_queue), []
 
-    best_placements, best_placed, _ = beam[0]
+    best_placements, best_placed, _, _ = beam[0]
     for idx, p in enumerate(best_placements):
         p.sequence = idx
 
@@ -545,14 +573,17 @@ def pack(
                 "reason": "配置不可能（サイズ・制約超過）"
             })
 
-        if not placements and remaining:
-            for c in remaining:
-                unplaced_items.append({
-                    "sku_id": c.sku_id,
-                    "name": c.name,
-                    "reason": "配置不可能（サイズ・制約超過）"
-                })
-            break
+        if not placements:
+            # 1個も置けなかったパレットは使用数に数えない
+            pallet_count -= 1
+            if remaining:
+                for c in remaining:
+                    unplaced_items.append({
+                        "sku_id": c.sku_id,
+                        "name": c.name,
+                        "reason": "配置不可能（サイズ・制約超過）"
+                    })
+                break
 
         # sequence をグローバル通番に振り直す（複数パレット時のアニメーション順序保証）
         offset = len(all_placements)
@@ -592,7 +623,9 @@ def _build_result(
 
     pallet_vol = pallet.length * pallet.width * pallet.effective_height
     case_vol = sum(p.length * p.width * p.height for p in placements)
-    efficiency = (case_vol / pallet_vol * 100) if pallet_vol > 0 else 0.0
+    # 使用パレット全体に対する体積効率（複数パレット時はパレット数で割る）
+    total_vol = pallet_vol * max(pallet_count, 1)
+    efficiency = (case_vol / total_vol * 100) if total_vol > 0 else 0.0
 
     max_height_used = max((p.z2 for p in placements), default=0)
 
@@ -622,6 +655,8 @@ def _build_result(
         applied_rules.append("外壁沿い優先")
     if rules.no_overhang:
         applied_rules.append("はみ出し禁止")
+    if rules.full_support:
+        applied_rules.append("完全支持(レンガ積み禁止)")
     if rules.temp_separate:
         applied_rules.append("温度帯分離")
 

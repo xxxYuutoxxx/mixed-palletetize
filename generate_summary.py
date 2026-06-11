@@ -40,6 +40,7 @@ DEFAULT_RULES   = RuleConfig(
     heavy_bottom=True,
     center_priority=True,
     no_overhang=False,
+    full_support=False,      # 改1当時の条件を維持（部分支持 support_ratio_min=0.7 を許容）
     overhang_limit=25/1100,
     height_tolerance=5,
 )
@@ -52,6 +53,19 @@ DEFAULT_SCORING = ScoreConfig(
     w_void    = 20 / _SW,
     w_group   = 30 / _SW,
 )
+# 現場再現優先プリセット（UI: stability=60, loadRate=40, height=40, void=20, grouping=70）
+_FW = 60 + 40 + 40 + 20 + 70  # 230
+FIELD_SCORING = ScoreConfig(
+    w_support = 60 / _FW,
+    w_center  = 40 / _FW,
+    w_height  = 40 / _FW,
+    w_void    = 20 / _FW,
+    w_group   = 70 / _FW,
+)
+# 現場再現優先はグループ集約重み(w_group)を効かせるため same_group を有効化
+from dataclasses import replace as _dc_replace
+FIELD_RULES = _dc_replace(DEFAULT_RULES, same_group=True)
+
 DEFAULT_BEAM    = 5          # 高精度（ビームサーチ width=5）
 DEFAULT_EXEC    = 'real'     # 現実制約モード
 
@@ -291,7 +305,11 @@ def build_excel(sheet_data: list[tuple[str, list[dict]]], output_path: str) -> N
 # ---------------------------------------------------------------------------
 # 計算ループ（設定を外部から指定可能）
 # ---------------------------------------------------------------------------
-def run_calculations(csv_files, supply: SupplyConfig, beam_width: int) -> list[dict]:
+def run_calculations(csv_files, supply: SupplyConfig, beam_width: int,
+                     rules: RuleConfig = None,
+                     scoring: ScoreConfig = None) -> list[dict]:
+    rules   = rules if rules is not None else DEFAULT_RULES
+    scoring = scoring if scoring is not None else DEFAULT_SCORING
     results: list[dict] = []
     for csv_file in csv_files:
         case_id = csv_file.stem
@@ -303,7 +321,7 @@ def run_calculations(csv_files, supply: SupplyConfig, beam_width: int) -> list[d
                 continue
 
             result = pack(cases, DEFAULT_PALLET, supply,
-                          DEFAULT_RULES, DEFAULT_SCORING,
+                          rules, scoring,
                           exec_mode=DEFAULT_EXEC, beam_width=beam_width)
 
             pallet_ids = sorted(set(p.pallet_id for p in result.placements))
@@ -345,35 +363,202 @@ def run_calculations(csv_files, supply: SupplyConfig, beam_width: int) -> list[d
 
 
 # ---------------------------------------------------------------------------
+# 考察シート生成
+# ---------------------------------------------------------------------------
+def _load_prev_pallet_counts(path: str) -> dict:
+    """改1のシートから ケース番号→{fifo/buffer: パレット数} を読み込む（比較用）"""
+    from openpyxl import load_workbook
+    out: dict = {}
+    try:
+        wb = load_workbook(path, read_only=True)
+        for sheet, key in [('FIFO制約あり', 'fifo'), ('バッファあり', 'buffer')]:
+            if sheet not in wb.sheetnames:
+                continue
+            for row in wb[sheet].iter_rows(min_row=2, values_only=True):
+                if row[0] is None:
+                    continue
+                out.setdefault(str(row[0]), {})[key] = row[5]
+        wb.close()
+    except Exception as e:
+        print(f"[WARN] 改1読み込み失敗（比較セクションは省略）: {e}")
+    return out
+
+
+def _agg(results: list[dict]) -> dict:
+    n = max(len(results), 1)
+    return {
+        'mean_pallet':    sum(r['pallet_count'] for r in results) / n,
+        'mean_eff':       sum(r['efficiency'] for r in results) / n,
+        'unplaced_files': sum(1 for r in results if r['unplaced_cases'] > 0),
+        'unplaced_total': sum(r['unplaced_cases'] for r in results),
+    }
+
+
+def build_kousatsu_rows(results_map: dict, prev: dict) -> list:
+    """考察シートの行データを組み立てる。各行は (style, [col値...])"""
+    rows: list = []
+    add = rows.append
+
+    add(('title', ['混載パレタイズ積付計算結果 改2  考察レポート（計算エンジン2026-06-11修正版・自動集計）']))
+    add(('body',  []))
+
+    # ---- 1. 計算条件 ----
+    add(('sec',  ['1. 計算条件']))
+    add(('head', ['シート', '供給モード', 'バッファ/ビーム幅', 'スコア重み', 'ルール']))
+    add(('body', ['FIFO制約あり', 'FIFO（厳密順序）', 'beam=5',
+                  '標準 (支持50/重心50/高さ30/空隙20/集約30)',
+                  '重量物下段・中心寄せ・部分支持0.7許容・はみ出し25mm']))
+    add(('body', ['バッファあり', 'バッファ(6件先読み)', 'buffer=6 / beam=6',
+                  '標準 (同上)', '同上']))
+    add(('body', ['FIFO制約あり_現場再現優先', 'FIFO（厳密順序）', 'beam=5',
+                  '現場再現 (支持60/重心40/高さ40/空隙20/集約70)', '同上＋同品種集約ON']))
+    add(('body', ['バッファあり_現場再現優先', 'バッファ(6件先読み)', 'buffer=6 / beam=6',
+                  '現場再現 (同上)', '同上＋同品種集約ON']))
+    add(('body', []))
+
+    # ---- 2. 結果サマリー ----
+    add(('sec',  ['2. 結果サマリー（全ケース平均）']))
+    add(('head', ['シート', '平均パレット数', '平均体積効率(%)', '未配置発生ファイル数', '未配置ケース総数']))
+    for name, results in results_map.items():
+        a = _agg(results)
+        add(('body', [name, round(a['mean_pallet'], 2), round(a['mean_eff'], 1),
+                      a['unplaced_files'], a['unplaced_total']]))
+    add(('body', ['※ 体積効率の定義を改2で変更: 全ケース体積 ÷ (パレット1枚分体積 × 使用パレット数)。'
+                  '改1は分母がパレット1枚分固定だったため、複数パレット時の数値は改1と直接比較できない。']))
+    add(('body', []))
+
+    # ---- 3. FIFO vs バッファ ----
+    fifo = {r['case_id']: r for r in results_map['FIFO制約あり']}
+    buf  = {r['case_id']: r for r in results_map['バッファあり']}
+    shared = [cid for cid in fifo if cid in buf]
+    improved = sorted([c for c in shared if buf[c]['pallet_count'] < fifo[c]['pallet_count']])
+    worsened = sorted([c for c in shared if buf[c]['pallet_count'] > fifo[c]['pallet_count']])
+    add(('sec',  ['3. FIFO制約あり vs バッファあり（パレット数比較・標準重み）']))
+    add(('head', ['区分', '件数', 'ケース番号']))
+    add(('body', ['バッファで減少（改善）', len(improved), ', '.join(improved) or '─']))
+    add(('body', ['バッファで増加（悪化）', len(worsened), ', '.join(worsened) or '─']))
+    add(('body', ['同数', len(shared) - len(improved) - len(worsened), '─']))
+    add(('body', []))
+
+    # ---- 4. 標準 vs 現場再現優先 ----
+    f_std = fifo
+    f_fld = {r['case_id']: r for r in results_map['FIFO制約あり_現場再現優先']}
+    shared2 = [cid for cid in f_std if cid in f_fld]
+    fld_up   = sorted([c for c in shared2 if f_fld[c]['pallet_count'] > f_std[c]['pallet_count']])
+    fld_down = sorted([c for c in shared2 if f_fld[c]['pallet_count'] < f_std[c]['pallet_count']])
+    add(('sec',  ['4. 標準重み vs 現場再現優先（FIFO・パレット数比較）']))
+    add(('head', ['区分', '件数', 'ケース番号']))
+    add(('body', ['現場再現優先で減少', len(fld_down), ', '.join(fld_down) or '─']))
+    add(('body', ['現場再現優先で増加', len(fld_up), ', '.join(fld_up) or '─']))
+    add(('body', ['同数', len(shared2) - len(fld_up) - len(fld_down), '─']))
+    add(('body', []))
+
+    # ---- 5. 改1 → 改2 比較（エンジン修正の影響） ----
+    if prev:
+        add(('sec',  ['5. 改1 → 改2 比較（FIFO制約あり・パレット数）']))
+        shared3 = [c for c in fifo if c in prev and 'fifo' in prev[c]]
+        dec = sorted([c for c in shared3 if fifo[c]['pallet_count'] < prev[c]['fifo']])
+        inc = sorted([c for c in shared3 if fifo[c]['pallet_count'] > prev[c]['fifo']])
+        prev_mean = sum(prev[c]['fifo'] for c in shared3) / max(len(shared3), 1)
+        new_mean  = sum(fifo[c]['pallet_count'] for c in shared3) / max(len(shared3), 1)
+        add(('head', ['区分', '件数/値', 'ケース番号']))
+        add(('body', ['平均パレット数 改1', round(prev_mean, 2), '─']))
+        add(('body', ['平均パレット数 改2', round(new_mean, 2), '─']))
+        add(('body', ['改2で減少', len(dec), ', '.join(dec) or '─']))
+        add(('body', ['改2で増加', len(inc), ', '.join(inc) or '─']))
+        add(('body', ['同数', len(shared3) - len(dec) - len(inc), '─']))
+        add(('body', []))
+
+    # ---- 6. 計算エンジン変更点 ----
+    add(('sec',  ['6. 改2 計算エンジン変更点（2026-06-11）']))
+    for note in [
+        '・FIFO厳密化: 先頭ケースが配置不能な時点でパレットを閉じる（改1は後続を先に配置する順序違反があった）',
+        '・配置失敗ケースの再試行方式を修正: 1ケースの失敗でパレットが早期に閉じる問題を解消',
+        '・上面許容荷重(max_top_load)の多段積みチェック漏れを修正',
+        '・温度帯分離の横隣接未検出を修正（本データでは温度帯未使用のため影響なし）',
+        '・体積効率の定義変更: 使用パレット数を分母に反映（考察2参照）',
+        '・1個も配置されない空パレットをパレット数に計上しないよう修正',
+        '・候補生成の重複除去により計算速度を改善（結果には影響なし）',
+    ]:
+        add(('body', [note]))
+
+    return rows
+
+
+def _fill_kousatsu(ws, rows: list) -> None:
+    title_font = Font(name='メイリオ', bold=True, size=12)
+    sec_font   = Font(name='メイリオ', bold=True, size=10, color='1F4E79')
+    head_font  = Font(name='メイリオ', bold=True, size=9, color='FFFFFF')
+    body_font  = Font(name='メイリオ', size=9)
+    widths = [4, 38, 24, 24, 40, 44]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    r = 1
+    for style, vals in rows:
+        for c, v in enumerate(vals, 2):
+            cell = ws.cell(row=r, column=c, value=v)
+            if style == 'title':
+                cell.font = title_font
+            elif style == 'sec':
+                cell.font = sec_font
+            elif style == 'head':
+                cell.font = head_font
+                cell.fill = HEADER_FILL
+                cell.border = BORDER
+                cell.alignment = CENTER_ALIGN
+            else:
+                cell.font = body_font
+                if len(vals) > 1:
+                    cell.border = BORDER
+                    cell.alignment = Alignment(vertical='center', wrap_text=True)
+        r += 1
+
+
+# ---------------------------------------------------------------------------
 # メイン
 # ---------------------------------------------------------------------------
 def main():
     data_dir = Path('data')
     csv_files = sorted(data_dir.glob('*.csv'), key=lambda p: p.stem)
-    output_path = 'Summary_混載パレタイズ積付計算結果.xlsx'
+    output_path = sys.argv[1] if len(sys.argv) > 1 else 'Summary_混載パレタイズ積付計算結果_改2.xlsx'
 
     print(f"CSV files found: {len(csv_files)}")
 
-    # ---- シート1: FIFO制約あり ----
-    print("\n" + "=" * 60)
-    print("【シート1】FIFOあり (mode=fifo, buffer_size=5, beam=5)")
-    print("=" * 60)
-    results_fifo = run_calculations(csv_files, DEFAULT_SUPPLY, DEFAULT_BEAM)
+    runs = [
+        ('FIFO制約あり',
+         SupplyConfig(mode='fifo', buffer_size=5), DEFAULT_BEAM, DEFAULT_RULES, DEFAULT_SCORING),
+        ('バッファあり',
+         SupplyConfig(mode='buffer', buffer_size=6), 6, DEFAULT_RULES, DEFAULT_SCORING),
+        ('FIFO制約あり_現場再現優先',
+         SupplyConfig(mode='fifo', buffer_size=5), DEFAULT_BEAM, FIELD_RULES, FIELD_SCORING),
+        ('バッファあり_現場再現優先',
+         SupplyConfig(mode='buffer', buffer_size=6), 6, FIELD_RULES, FIELD_SCORING),
+    ]
 
-    # ---- シート2: バッファあり ----
-    buffer_supply = SupplyConfig(mode='buffer', buffer_size=6)
-    print("\n" + "=" * 60)
-    print("【シート2】バッファあり (mode=buffer, buffer_size=6, beam=6)")
-    print("=" * 60)
-    results_buffer = run_calculations(csv_files, buffer_supply, beam_width=6)
+    results_map: dict = {}
+    for name, supply, beam, rules, scoring in runs:
+        print("\n" + "=" * 60)
+        print(f"【{name}】 mode={supply.mode}, beam={beam}")
+        print("=" * 60)
+        results_map[name] = run_calculations(csv_files, supply, beam, rules, scoring)
 
-    # ---- Excel 出力 ----
+    prev = _load_prev_pallet_counts('Summary_混載パレタイズ積付計算結果_改1.xlsx')
+
+    # ---- Excel 出力（シート順は改1と同一: FIFO/バッファ/考察/現場再現×2） ----
     print("\n" + "-" * 60)
-    print(f"Writing Excel...")
-    build_excel([
-        ('サマリー一覧',  results_fifo),
-        ('バッファあり',  results_buffer),
-    ], output_path)
+    print("Writing Excel...")
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'FIFO制約あり'
+    _fill_sheet(ws, results_map['FIFO制約あり'])
+    _fill_sheet(wb.create_sheet('バッファあり'), results_map['バッファあり'])
+    _fill_kousatsu(wb.create_sheet('考察'), build_kousatsu_rows(results_map, prev))
+    _fill_sheet(wb.create_sheet('FIFO制約あり_現場再現優先'),
+                results_map['FIFO制約あり_現場再現優先'])
+    _fill_sheet(wb.create_sheet('バッファあり_現場再現優先'),
+                results_map['バッファあり_現場再現優先'])
+    wb.save(output_path)
     print(f"Done: {output_path}")
 
 

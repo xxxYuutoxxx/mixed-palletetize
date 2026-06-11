@@ -165,19 +165,25 @@ def check_temperature_separation(
     case_l: int, case_w: int, case_h: int,
     rules: RuleConfig
 ) -> CheckResult:
-    """温度帯分離チェック: 異なる温度帯のケースが隣接しないか"""
-    if not rules.temp_separate or case_item.temperature == "normal":
+    """
+    温度帯分離チェック: 異なる温度帯のケースが面接触で隣接しないか。
+    接触面と直交する2軸に重なりがある場合のみ「隣接」とみなす
+    （例: X面接触なら Y・Z 方向に重なりが必要）。
+    """
+    if not rules.temp_separate:
         return True, ""
 
     for p in placements:
-        if hasattr(p, 'temperature') and p.temperature != case_item.temperature:
-            x_touch = (x == p.x2 or x + case_l == p.x)
-            y_touch = (y == p.y2 or y + case_w == p.y)
-            z_touch = (z == p.z2 or z + case_h == p.z)
-            xy_overlap = (x < p.x2 and x + case_l > p.x and
-                          y < p.y2 and y + case_w > p.y)
-            if (x_touch or y_touch or z_touch) and xy_overlap:
-                return False, f"温度帯隣接: {case_item.temperature} vs {p.sku_id}"
+        if p.temperature == case_item.temperature:
+            continue
+        x_ov = x < p.x2 and x + case_l > p.x
+        y_ov = y < p.y2 and y + case_w > p.y
+        z_ov = z < p.z2 and z + case_h > p.z
+        x_touch = (x == p.x2 or x + case_l == p.x) and y_ov and z_ov
+        y_touch = (y == p.y2 or y + case_w == p.y) and x_ov and z_ov
+        z_touch = (z == p.z2 or z + case_h == p.z) and x_ov and y_ov
+        if x_touch or y_touch or z_touch:
+            return False, f"温度帯隣接: {case_item.temperature} vs {p.sku_id}({p.temperature})"
 
     return True, ""
 
@@ -236,24 +242,24 @@ def check_max_top_load(
 ) -> CheckResult:
     """
     上面許容荷重チェック:
-    このケースを置く位置の直下にある配置物の max_top_load を超えないか。
+    このケースの下方にあり XY が重なる全配置物（直下だけでなく
+    2段以上下の間接支持も含む）の max_top_load を超えないか。
     """
     if z == 0:
         return True, ""
 
     for p in placements:
-        if p.max_top_load <= 0:
+        if p.max_top_load <= 0 or p.z2 > z:
             continue
-        if p.z2 == z:
-            ox = max(0, min(x + case_l, p.x2) - max(x, p.x))
-            oy = max(0, min(y + case_w, p.y2) - max(y, p.y))
-            if ox > 0 and oy > 0:
-                weight_above = _calc_weight_above(p, placements)
-                if weight_above + case_item.weight > p.max_top_load:
-                    return False, (
-                        f"{p.sku_id}の上面許容荷重超過: "
-                        f"{weight_above + case_item.weight:.1f} > {p.max_top_load}kg"
-                    )
+        ox = max(0, min(x + case_l, p.x2) - max(x, p.x))
+        oy = max(0, min(y + case_w, p.y2) - max(y, p.y))
+        if ox > 0 and oy > 0:
+            weight_above = _calc_weight_above(p, placements)
+            if weight_above + case_item.weight > p.max_top_load:
+                return False, (
+                    f"{p.sku_id}の上面許容荷重超過: "
+                    f"{weight_above + case_item.weight:.1f} > {p.max_top_load}kg"
+                )
 
     return True, ""
 
@@ -278,40 +284,48 @@ def run_all_checks(
         if case_item.support_ratio_required > 0
         else rules.support_ratio_min
     )
-    # no_overhang=True 時はケース間オーバーハングも禁止（完全支持を要求）
-    if rules.no_overhang:
+    # full_support=True 時はケース間オーバーハングを禁止（完全支持を要求）
+    # ※ パレットからのはみ出し(no_overhang/overhang_limit)とは独立した制約。
+    #   False にすると support_ratio_min を下限とした部分支持（レンガ積み）が可能。
+    if rules.full_support:
         support_min = 1.0
 
+    # 遅延評価: 各チェックは for ループ内で呼び出されるまで実行されない。
+    # hit_stats なしの場合は最初の失敗で即返却し、残りのチェック計算を省略する。
     checks = [
-        ("pallet_bounds", check_pallet_bounds(
+        ("pallet_bounds", lambda: check_pallet_bounds(
             x, y, z, case_l, case_w, case_h, pallet, rules.overhang_limit)),
-        ("collision", check_collision(
+        ("collision", lambda: check_collision(
             x, y, z, case_l, case_w, case_h, placements)),
-        ("support_ratio", check_support_ratio(
+        ("support_ratio", lambda: check_support_ratio(
             x, y, z, case_l, case_w, placements, support_min, rules.height_tolerance)),
-        ("total_weight", check_total_weight(
+        ("total_weight", lambda: check_total_weight(
             case_item, placements, pallet)),
-        ("max_stack", check_max_stack(
+        ("max_stack", lambda: check_max_stack(
             x, y, z, case_l, case_w, case_item, placements)),
-        ("fragile", check_fragile_constraint(
+        ("fragile", lambda: check_fragile_constraint(
             x, y, z, case_l, case_w, case_h, case_item, placements, rules)),
-        ("heavy_bottom", check_heavy_bottom(
+        ("heavy_bottom", lambda: check_heavy_bottom(
             x, y, z, case_l, case_w, case_item, placements, rules)),
-        ("temperature", check_temperature_separation(
+        ("temperature", lambda: check_temperature_separation(
             case_item, placements, x, y, z, case_l, case_w, case_h, rules)),
-        ("max_top_load", check_max_top_load(
+        ("max_top_load", lambda: check_max_top_load(
             x, y, z, case_l, case_w, case_item, placements)),
-        ("stackable", check_stackable(
+        ("stackable", lambda: check_stackable(
             x, y, z, case_l, case_w, placements)),
     ]
 
     if hit_stats is not None:
         hit_stats.total_checked += 1
 
-    for attr, (ok, reason) in checks:
+    for attr, check in checks:
+        ok, reason = check()
         if not ok:
             failures.append(reason)
             if hit_stats is not None:
                 setattr(hit_stats, attr, getattr(hit_stats, attr) + 1)
+            else:
+                # hit_stats なし（ビームサーチ候補評価）: 最初の失敗で即返却
+                return False, failures
 
     return len(failures) == 0, failures

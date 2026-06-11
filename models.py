@@ -56,7 +56,8 @@ class RuleConfig:
     center_priority: bool = False  # 重心中央優先
     outer_priority: bool = False   # 外壁沿い優先
     stack_priority: bool = False   # 縦積み優先
-    no_overhang: bool = True       # はみ出し禁止
+    no_overhang: bool = True       # パレットからのはみ出し禁止
+    full_support: bool = True      # ケース間オーバーハング禁止（支持率100%要求・レンガ積み不可）
     layer_first: bool = False      # 面積み優先（現在層を埋めてから上段へ）
     temp_separate: bool = False    # 温度帯分離
     overhang_limit: float = 0.0    # 許容はみ出し率 0.0〜0.3
@@ -91,6 +92,8 @@ class ScoreBreakdown:
     group_score: float = 0.0
     block_score: float = 0.0
     lateral_score: float = 0.0
+    layer_score: float = 0.0
+    overhang_score: float = 0.0
     total_score: float = 0.0
 
     def to_dict(self) -> Dict[str, float]:
@@ -102,6 +105,8 @@ class ScoreBreakdown:
             "group_score":    round(self.group_score,    3),
             "block_score":    round(self.block_score,    3),
             "lateral_score":  round(self.lateral_score,  3),
+            "layer_score":    round(self.layer_score,    3),
+            "overhang_score": round(self.overhang_score, 3),
             "total_score":    round(self.total_score,    3),
         }
 

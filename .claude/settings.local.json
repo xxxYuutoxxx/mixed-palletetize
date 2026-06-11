@@ -107,7 +107,13 @@
       "PowerShell(Stop-Process *)",
       "WebFetch(domain:mixed-palletetize.onrender.com)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\onlyg\\\\documents\\\\claude\\\\palletize\" -Recurse -Force)",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "WebSearch",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\onlyg\\\\documents\\\\claude\\\\palletize\" -Recurse)",
+      "PowerShell(git pull *)",
+      "PowerShell(python test_algorithm.py)",
+      "PowerShell(python benchmark.py)",
+      "PowerShell(git add *)"
     ],
     "defaultMode": "acceptEdits"
   }

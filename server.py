@@ -114,6 +114,8 @@ def api_pack(req: PackRequest):
         outer_priority=bool(r.get("outer_priority", False)),
         stack_priority=bool(r.get("stack_priority", False)),
         no_overhang=bool(r.get("no_overhang", True)),
+        # 後方互換: full_support 未指定の旧ペイロードは no_overhang の値を引き継ぐ
+        full_support=bool(r.get("full_support", r.get("no_overhang", True))),
         layer_first=bool(r.get("layer_first", False)),
         temp_separate=bool(r.get("temp_separate", False)),
         overhang_limit=float(r.get("overhang_limit", 0.0)),
