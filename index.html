@@ -899,19 +899,19 @@ input[type=range] { flex: 1; accent-color: #e67e22; cursor: pointer; }
             <div class="sub-section-title">チェックボックス制約一覧</div>
             <div class="constraint-check-list">
               <label class="constraint-item"><input type="checkbox" id="cbFragileTop"   class="constraint-chk" onchange="checkConflicts()"> Fragile品の上載禁止</label>
-              <label class="constraint-item"><input type="checkbox" id="cbHeavyBottom"  class="constraint-chk" checked onchange="checkConflicts()"> 重い物を下段優先</label>
+              <label class="constraint-item"><input type="checkbox" id="cbHeavyBottom"  class="constraint-chk" onchange="checkConflicts()"> 重い物を下段優先</label>
               <label class="constraint-item"><input type="checkbox" id="cbSameGroup"    class="constraint-chk"        onchange="checkConflicts()"> 同品種同一段優先</label>
-              <label class="constraint-item"><input type="checkbox" id="cbCenterPrio"   class="constraint-chk" checked onchange="checkConflicts()"> パレット中心寄せ優先</label>
+              <label class="constraint-item"><input type="checkbox" id="cbCenterPrio"   class="constraint-chk" onchange="checkConflicts()"> パレット中心寄せ優先</label>
               <label class="constraint-item"><input type="checkbox" id="cbOuterPrio"    class="constraint-chk"        onchange="checkConflicts()"> 外周優先配置</label>
               <label class="constraint-item"><input type="checkbox" id="cbStackPriority" class="constraint-chk"       onchange="checkConflicts()"> 段積み優先（隙間充填より段を優先）</label>
               <label class="constraint-item"><input type="checkbox" id="cbNoOverhang"   class="constraint-chk"  onchange="checkConflicts()"> オーバーハング禁止</label>
-              <label class="constraint-item"><input type="checkbox" id="cbFullSupport"  class="constraint-chk" checked onchange="checkConflicts()"> ケース間オーバーハング禁止（完全支持）</label>
+              <label class="constraint-item"><input type="checkbox" id="cbFullSupport"  class="constraint-chk" onchange="checkConflicts()"> ケース間オーバーハング禁止（完全支持）</label>
               <label class="constraint-item">
                 同一平面とみなす高さ差許容値: <input type="number" id="heightTolerance" min="0" max="100" step="1" value="5" style="width:65px;"> mm
               </label>
               <label class="constraint-item"><input type="checkbox" id="cbTempSeparate" class="constraint-chk"        onchange="checkConflicts()"> 温度帯混載禁止</label>
               <label class="constraint-item"><input type="checkbox" id="cbBlockStacking" class="constraint-chk" checked onchange="checkConflicts()"> 同一品種ブロック積み優先（面積み）</label>
-              <label class="constraint-item"><input type="checkbox" id="cbLayerFirst"    class="constraint-chk" checked onchange="checkConflicts()"> 面積み優先（層を埋めてから上段へ）</label>
+              <label class="constraint-item"><input type="checkbox" id="cbLayerFirst"    class="constraint-chk" onchange="checkConflicts()"> 面積み優先（層を埋めてから上段へ）</label>
             </div>
           </div>
         </div>
@@ -2991,7 +2991,7 @@ document.addEventListener('DOMContentLoaded', function() {
   initialData.forEach(function(d) { addRow(d); });
 
   /* デフォルトプリセット適用 */
-  applyPreset('field');
+  applyPreset('loadRate');
 
   /* eff height auto-calc */
   function updateEffHeight() {
